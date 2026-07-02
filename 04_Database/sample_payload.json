@@ -1,0 +1,12 @@
+{
+  "deviceId": "device001",
+  "tdsRaw": 1830,
+  "tdsPpm": 650,
+  "waterTemp": 26.4,
+  "waterLevel": "normal",
+  "pumpMain": false,
+  "pumpA": false,
+  "pumpB": false,
+  "ph": null,
+  "createdAt": "2026-06-12T10:30:00+07:00"
+}

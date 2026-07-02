@@ -1,0 +1,7 @@
+Hydroponic_IoT_ESP32 calibration notes.
+
+TODO:
+1. Record TDS calibration solution details.
+2. Record pump A calibration tests.
+3. Record pump B calibration tests.
+4. Keep raw measurements before calculating averages.
