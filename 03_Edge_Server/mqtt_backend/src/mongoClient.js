@@ -1,7 +1,67 @@
-// mongoClient.js
-// Purpose: Future MongoDB Atlas connection helper.
-// TODO:
-// 1. Read MongoDB URI from environment variables.
-// 2. Connect to the configured database.
-// 3. Provide collection handles for devices, sensor_logs, pump_logs, and alerts.
-// 4. Keep credentials out of source code.
+const { MongoClient } = require('mongodb');
+
+let client = null;
+let db = null;
+
+async function connectMongo() {
+  if (db) {
+    return db;
+  }
+
+  const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017';
+  const dbName = process.env.MONGO_DB_NAME || 'hydroponic_iot';
+
+  client = new MongoClient(uri);
+  await client.connect();
+  db = client.db(dbName);
+
+  console.log('MongoDB connected');
+  return db;
+}
+
+function getDb() {
+  if (!db) {
+    throw new Error('MongoDB is not connected');
+  }
+
+  return db;
+}
+
+function isMongoConnected() {
+  return Boolean(db);
+}
+
+async function ensureIndexes() {
+  const database = getDb();
+
+  await database.collection('sensor_logs').createIndex({ deviceId: 1, createdAt: -1 });
+  await database.collection('devices').createIndex({ deviceId: 1 }, { unique: true });
+  await database.collection('alerts').createIndex({ deviceId: 1, status: 1, type: 1 });
+  await database.collection('alerts').createIndex({ firstSeenAt: -1 });
+  await database.collection('pump_logs').createIndex({ deviceId: 1, createdAt: -1 });
+  await database.collection('pump_logs').createIndex({ commandId: 1 });
+  await database.collection('pump_calibrations').createIndex({ deviceId: 1, pump: 1, createdAt: -1 });
+  await database.collection('tds_calibrations').createIndex({ deviceId: 1, createdAt: -1 });
+
+  console.log('MongoDB indexes ensured');
+}
+
+async function closeMongo() {
+  if (!client) {
+    return;
+  }
+
+  await client.close();
+  client = null;
+  db = null;
+
+  console.log('MongoDB closed');
+}
+
+module.exports = {
+  connectMongo,
+  getDb,
+  isMongoConnected,
+  closeMongo,
+  ensureIndexes,
+};

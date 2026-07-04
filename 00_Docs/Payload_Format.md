@@ -2,24 +2,42 @@
 
 All MQTT payloads must use JSON.
 
-## Sensor Payload
+## Main Firmware V2 Sensor Payload
+
+MQTT topic: `hydroponic/device001/sensor`
+
+This payload is published by ESP32 Main Firmware V2. It contains raw TDS ADC data, estimated TDS voltage, water temperature, water level, pump states, and device uptime.
 
 ```json
 {
   "deviceId": "device001",
-  "tdsRaw": 1830,
-  "tdsPpm": 650,
-  "waterTemp": 26.4,
+  "tdsRaw": 2814,
+  "tdsVoltage": 2.267,
+  "tdsMin": 2760,
+  "tdsMax": 2843,
+  "waterTemp": 31.00,
+  "waterTempValid": true,
   "waterLevel": "normal",
   "pumpMain": false,
   "pumpA": false,
   "pumpB": false,
+  "pumpSpare": false,
   "ph": null,
-  "createdAt": "2026-06-12T10:30:00+07:00"
+  "uptimeMs": 123456
 }
 ```
 
+### Current V2 Notes
+
+- `tdsPpm` is not implemented yet. Current firmware only publishes raw ADC and estimated voltage.
+- `ph` remains `null` because pH is excluded from the current phase.
+- `createdAt` is not included yet because NTP time is not implemented on the ESP32.
+- `uptimeMs` is included so payload timing can be checked before NTP is added.
+- Backend/database code should add a server-side timestamp later.
+
 ## Pump Command Payload
+
+Reserved for a later phase. MQTT pump command subscription is not implemented in Main Firmware V2.
 
 ```json
 {
@@ -32,6 +50,8 @@ All MQTT payloads must use JSON.
 ```
 
 ## Pump Status Payload
+
+Reserved for a later phase.
 
 ```json
 {
@@ -48,6 +68,8 @@ All MQTT payloads must use JSON.
 ```
 
 ## Alert Payload
+
+Reserved for a later phase.
 
 ```json
 {
@@ -89,4 +111,4 @@ All MQTT payloads must use JSON.
 ## Notes
 
 - `auto_dosing` is reserved for later. Do not implement full auto dosing now.
-- `ph` remains `null` in the current phase because pH is excluded for now.
+- Pump command subscription is not part of Main Firmware V2.

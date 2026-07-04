@@ -2,10 +2,17 @@
   "name": "hydroponic-mqtt-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "Placeholder MQTT backend for Hydroponic_IoT_ESP32 core phase.",
+  "description": "Edge Server MQTT backend for Hydroponic_IoT_ESP32 core phase.",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "dev": "node src/index.js"
   },
-  "dependencies": {}
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongodb": "^6.12.0",
+    "mqtt": "^5.10.3"
+  }
 }

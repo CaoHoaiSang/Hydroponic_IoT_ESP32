@@ -1,7 +1,21 @@
-// PayloadBuilder.h
-// Purpose: Declare future JSON payload builder interfaces.
-// TODO:
-// 1. Build sensor payload JSON.
-// 2. Build pump status payload JSON.
-// 3. Build alert payload JSON.
-// 4. Match all payloads to Payload_Format.md.
+#ifndef PAYLOAD_BUILDER_H
+#define PAYLOAD_BUILDER_H
+
+#include <Arduino.h>
+
+#include "Sensors.h"
+
+String buildStatusPayload(const SensorData& data);
+String buildPumpStatusPayload(
+  const String& commandId,
+  const String& pump,
+  const String& action,
+  unsigned long durationMs,
+  bool accepted,
+  bool success,
+  const String& status,
+  const String& message
+);
+void printStatusPayload(const SensorData& data);
+
+#endif

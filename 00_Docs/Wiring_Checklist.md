@@ -13,11 +13,9 @@
 - [ ] Float switch connected between GPIO27 and GND
 - [ ] No 5V signal goes into ESP32 GPIO
 
-## Before MOSFET T05 Test
+## MOSFET Power And Input Wiring
 
 - [ ] Confirm the MOSFET module is the real IN+/IN- input pair type
-- [ ] Do not connect real pumps during the first MOSFET test
-- [ ] Prepare a multimeter or a small safe 12V load for output switching verification
 - [ ] GPIO25 connected to IN1+
 - [ ] ESP32 GND connected to IN1-
 - [ ] GPIO26 connected to IN2+
@@ -36,14 +34,48 @@
 - [ ] Do not connect MOSFET central 正 to ESP32
 - [ ] Do not connect pump power directly to ESP32
 
+## Main Pump Wiring After T06
+
+- [ ] Main pump ON/OFF through MOSFET CH1 has passed
+- [ ] GPIO25 connected to IN1+
+- [ ] ESP32 GND connected to IN1-
+- [ ] MOSFET OUT1+ connected to DC PWM speed controller IN+
+- [ ] MOSFET OUT1- connected to DC PWM speed controller IN-
+- [ ] DC PWM speed controller OUT+ connected to main circulation pump +
+- [ ] DC PWM speed controller OUT- connected to main circulation pump -
+- [ ] DC PWM speed controller is placed after MOSFET OUT1 and before the main pump
+- [ ] DC PWM speed controller is not placed before the MOSFET module power input
+- [ ] DC PWM speed controller affects only the main circulation pump
+- [ ] Pump A and Pump B are not routed through the main pump speed controller
+- [ ] Speed controller knob can adjust main pump power/flow
+- [ ] Speed controller is hardware-only in the current phase
+- [ ] ESP32 still only controls main pump ON/OFF through GPIO25 and MOSFET CH1
+- [ ] Speed feedback or software speed control is not implemented
+
+## Before T07 Pump A/B Test
+
+- [ ] Use clean water only
+- [ ] Do not connect nutrient A/B bottles yet
+- [ ] Pump A + connected to OUT2+
+- [ ] Pump A - connected to OUT2-
+- [ ] Pump B + connected to OUT3+
+- [ ] Pump B - connected to OUT3-
+- [ ] GPIO26 connected to IN2+
+- [ ] ESP32 GND connected to IN2-
+- [ ] GPIO14 connected to IN3+
+- [ ] ESP32 GND connected to IN3-
+- [ ] MOSFET central 正 connected to adapter +12V
+- [ ] MOSFET central 负 connected to adapter GND / common GND
+- [ ] ESP32 GND connected to MOSFET central 负 / common GND
+- [ ] Pump A and Pump B are not run at the same time during T07
+
 ## First Power-Up Order
 
 1. Power ESP32 through USB.
 2. Check Serial Monitor.
 3. Test sensors without pumps.
-4. For T05, keep pumps disconnected.
-5. Connect MOSFET inputs and common ground.
-6. Connect adapter +12V only to MOSFET central 正.
-7. Connect adapter GND to MOSFET central 负 and ESP32 GND.
-8. Verify MOSFET output switching with a multimeter or small safe 12V load.
-9. Test real pumps only after MOSFET output is verified.
+4. Verify MOSFET output switching before connecting pumps.
+5. For main pump, keep the DC PWM speed controller after MOSFET OUT1 and before the pump.
+6. For T07, connect Pump A to OUT2 and Pump B to OUT3.
+7. Use clean water only for Pump A/B testing.
+8. Keep nutrient A/B bottles disconnected until a later calibration task.

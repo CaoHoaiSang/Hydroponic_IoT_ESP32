@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hydroponic IoT Dashboard</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Hydroponic_IoT_ESP32</p>
+        <h1>Hydroponic IoT Dashboard</h1>
+        <p class="device-line">Device ID: <strong id="deviceIdLabel">device001</strong></p>
+      </div>
+      <div class="status-panel" aria-label="System status">
+        <span id="healthBadge" class="badge badge-neutral">Backend unknown</span>
+        <span id="mqttBadge" class="badge badge-neutral">MQTT unknown</span>
+        <span id="mongoBadge" class="badge badge-neutral">MongoDB unknown</span>
+        <span class="refresh-time">Last refresh: <strong id="lastRefreshTime">N/A</strong></span>
+      </div>
+    </header>
+
+    <main class="dashboard-shell">
+      <section id="messageBar" class="message-bar" role="status">Loading dashboard data...</section>
+
+      <section class="section-block" aria-labelledby="activeAlertsTitle">
+        <div class="section-heading">
+          <h2 id="activeAlertsTitle">Active Alerts</h2>
+          <span id="alertsStatus" class="meta-text">Checking alerts...</span>
+        </div>
+        <div id="alertsPanel" class="alerts-panel">
+          <p class="empty-state">Loading active alerts...</p>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="latestStatusTitle">
+        <div class="section-heading">
+          <h2 id="latestStatusTitle">Latest Device Status</h2>
+          <span id="lastSeenMeta" class="meta-text">Last seen: N/A</span>
+        </div>
+        <div class="card-grid metrics-grid">
+          <article class="metric-card">
+            <span class="metric-label">TDS Raw</span>
+            <strong id="tdsRawValue" class="metric-value">N/A</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">TDS Voltage</span>
+            <strong id="tdsVoltageValue" class="metric-value">N/A</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">TDS PPM</span>
+            <strong id="tdsPpmValue" class="metric-value">N/A</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Water Temperature</span>
+            <strong id="waterTempValue" class="metric-value">N/A</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Water Level</span>
+            <strong id="waterLevelBadge" class="badge badge-neutral">N/A</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">pH</span>
+            <strong id="phValue" class="metric-value">N/A</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Last Seen</span>
+            <strong id="lastSeenValue" class="metric-value compact-value">N/A</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="tdsCalibrationTitle">
+        <div class="section-heading">
+          <h2 id="tdsCalibrationTitle">TDS Calibration</h2>
+          <span id="tdsCalibrationStatus" class="meta-text">Latest TDS calibration</span>
+        </div>
+        <div class="calibration-panel">
+          <ol class="calibration-steps">
+            <li>Put TDS probe into solution.</li>
+            <li>Wait for TDS voltage to stabilize.</li>
+            <li>Read reference ppm using external TDS meter.</li>
+            <li>Save calibration.</li>
+            <li>Backend will estimate tdsPpm from future sensor payloads.</li>
+          </ol>
+          <div class="calibration-layout">
+            <form id="tdsCalibrationForm" class="calibration-form">
+              <label for="tdsMeasuredRawInput">Measured raw ADC</label>
+              <input id="tdsMeasuredRawInput" type="number" min="1" step="1" placeholder="2828">
+
+              <label for="tdsMeasuredVoltageInput">Measured voltage</label>
+              <input id="tdsMeasuredVoltageInput" type="number" min="0.001" max="3.3" step="0.001" placeholder="2.279">
+
+              <label for="tdsReferencePpmInput">Reference TDS ppm</label>
+              <input id="tdsReferencePpmInput" type="number" min="1" max="5000" step="0.1" placeholder="900">
+
+              <label for="tdsWaterTempInput">Water temperature</label>
+              <input id="tdsWaterTempInput" type="number" step="0.01" placeholder="29.63">
+
+              <label for="tdsNoteInput">Note</label>
+              <input id="tdsNoteInput" type="text" maxlength="120" placeholder="external TDS meter reference">
+
+              <div class="calibration-button-row">
+                <button id="useLatestTdsButton" class="secondary-button" type="button">Use Latest Sensor Values</button>
+                <button id="saveTdsCalibrationButton" type="submit">Save TDS Calibration</button>
+              </div>
+            </form>
+            <div class="tds-calibration-latest">
+              <article class="metric-card">
+                <span class="metric-label">Factor</span>
+                <strong id="latestTdsFactor" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Reference ppm</span>
+                <strong id="latestTdsReferencePpm" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Measured voltage</span>
+                <strong id="latestTdsMeasuredVoltage" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Calibrated at</span>
+                <strong id="latestTdsCalibratedAt" class="metric-value compact-value">N/A</strong>
+              </article>
+            </div>
+          </div>
+          <div class="table-wrap calibration-history-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Raw</th>
+                  <th>Voltage</th>
+                  <th>Reference ppm</th>
+                  <th>Factor ppm/V</th>
+                  <th>Water Temp</th>
+                  <th>Note</th>
+                </tr>
+              </thead>
+              <tbody id="tdsCalibrationHistoryBody">
+                <tr>
+                  <td colspan="7">Loading TDS calibration history...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p id="tdsCalibrationHistoryStatus" class="meta-text calibration-history-status">Latest 10 rows</p>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="pumpStatusTitle">
+        <div class="section-heading">
+          <h2 id="pumpStatusTitle">Pump Status</h2>
+        </div>
+        <div class="card-grid pump-grid">
+          <article class="metric-card pump-card">
+            <span class="metric-label">Main Pump</span>
+            <strong id="pumpMainBadge" class="badge badge-neutral">N/A</strong>
+          </article>
+          <article class="metric-card pump-card">
+            <span class="metric-label">Pump A</span>
+            <strong id="pumpABadge" class="badge badge-neutral">N/A</strong>
+          </article>
+          <article class="metric-card pump-card">
+            <span class="metric-label">Pump B</span>
+            <strong id="pumpBBadge" class="badge badge-neutral">N/A</strong>
+          </article>
+          <article class="metric-card pump-card">
+            <span class="metric-label">Spare Output</span>
+            <strong id="pumpSpareBadge" class="badge badge-neutral">N/A</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="manualPumpTitle">
+        <div class="section-heading">
+          <h2 id="manualPumpTitle">Manual Pump Test</h2>
+          <span class="meta-text">Pulse-only commands</span>
+        </div>
+        <div class="manual-panel">
+          <div class="warning-list">
+            <p>Pump A/B should use clean water unless doing real dosing later.</p>
+            <p>Commands are pulse-only. Do not use if water level is low.</p>
+          </div>
+          <div class="manual-grid">
+            <article class="manual-card">
+              <label for="mainDurationInput">Main pump duration</label>
+              <div class="manual-control">
+                <input id="mainDurationInput" type="number" min="100" max="10000" step="100" value="5000">
+                <button id="pulseMainButton" type="button">Pulse Main</button>
+              </div>
+            </article>
+            <article class="manual-card">
+              <label for="pumpADurationInput">Pump A duration</label>
+              <div class="manual-control">
+                <input id="pumpADurationInput" type="number" min="100" max="5000" step="100" value="3000">
+                <button id="pulseAButton" type="button">Pulse A</button>
+              </div>
+            </article>
+            <article class="manual-card">
+              <label for="pumpBDurationInput">Pump B duration</label>
+              <div class="manual-control">
+                <input id="pumpBDurationInput" type="number" min="100" max="5000" step="100" value="3000">
+                <button id="pulseBButton" type="button">Pulse B</button>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="pumpCalibrationTitle">
+        <div class="section-heading">
+          <h2 id="pumpCalibrationTitle">Pump Calibration</h2>
+          <span id="calibrationStatus" class="meta-text">Latest calibration</span>
+        </div>
+        <div class="calibration-panel">
+          <ol class="calibration-steps">
+            <li>Use clean water only.</li>
+            <li>Place outlet into measuring cup.</li>
+            <li>Run a pulse using Manual Pump Test.</li>
+            <li>Enter actual measured volume in ml.</li>
+            <li>Save calibration.</li>
+          </ol>
+          <div class="calibration-layout">
+            <form id="calibrationForm" class="calibration-form">
+              <label for="calibrationPumpSelect">Pump</label>
+              <select id="calibrationPumpSelect">
+                <option value="A">Pump A</option>
+                <option value="B">Pump B</option>
+              </select>
+
+              <label for="calibrationDurationInput">Duration ms</label>
+              <input id="calibrationDurationInput" type="number" min="100" max="30000" step="100" value="5000">
+
+              <label for="calibrationMeasuredInput">Measured ml</label>
+              <input id="calibrationMeasuredInput" type="number" min="0.1" max="1000" step="0.1" placeholder="12.5">
+
+              <label for="calibrationNoteInput">Note</label>
+              <input id="calibrationNoteInput" type="text" maxlength="120" placeholder="clean water test">
+
+              <button id="saveCalibrationButton" type="submit">Save Calibration</button>
+            </form>
+            <div class="calibration-latest">
+              <article class="metric-card">
+                <span class="metric-label">Pump A flow rate</span>
+                <strong id="latestPumpAFlow" class="metric-value">N/A</strong>
+                <span id="latestPumpATime" class="meta-text">Last calibrated: N/A</span>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Pump B flow rate</span>
+                <strong id="latestPumpBFlow" class="metric-value">N/A</strong>
+                <span id="latestPumpBTime" class="meta-text">Last calibrated: N/A</span>
+              </article>
+            </div>
+          </div>
+          <div class="table-wrap calibration-history-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Pump</th>
+                  <th>Duration ms</th>
+                  <th>Measured ml</th>
+                  <th>Flow ml/s</th>
+                  <th>Note</th>
+                </tr>
+              </thead>
+              <tbody id="calibrationHistoryBody">
+                <tr>
+                  <td colspan="6">Loading calibration history...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p id="calibrationHistoryStatus" class="meta-text calibration-history-status">Latest 10 rows</p>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="trendTitle">
+        <div class="section-heading">
+          <h2 id="trendTitle">Simple Trend Preview</h2>
+          <span id="trendSummary" class="meta-text">Waiting for logs...</span>
+        </div>
+        <div class="trend-panel">
+          <div class="trend-legend" aria-hidden="true">
+            <span><i class="legend-swatch tds"></i>TDS raw</span>
+            <span><i class="legend-swatch temp"></i>Water temp</span>
+          </div>
+          <svg id="trendSvg" class="trend-svg" viewBox="0 0 640 180" role="img" aria-label="Recent TDS raw and water temperature trend"></svg>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="logsTitle">
+        <div class="section-heading">
+          <h2 id="logsTitle">Sensor Logs</h2>
+          <span id="logsStatus" class="meta-text">Latest 20 logs</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>TDS Raw</th>
+                <th>TDS Voltage</th>
+                <th>TDS PPM</th>
+                <th>Water Temp</th>
+                <th>Water Level</th>
+                <th>Pump Main</th>
+                <th>Pump A</th>
+                <th>Pump B</th>
+                <th>Uptime</th>
+              </tr>
+            </thead>
+            <tbody id="logsTableBody">
+              <tr>
+                <td colspan="10">Loading sensor logs...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <span>Dashboard with manual controls</span>
+      <span>Manual pump control is pulse-only for safety</span>
+    </footer>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

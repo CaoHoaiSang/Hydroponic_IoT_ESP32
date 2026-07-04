@@ -40,7 +40,7 @@ The module also has two central power terminals:
 
 ## MOSFET Input Wiring
 
-| MOSFET Channel | ESP32 GPIO Signal | MOSFET Input + | MOSFET Input - | Later Load |
+| MOSFET Channel | ESP32 GPIO Signal | MOSFET Input + | MOSFET Input - | Load |
 |---|---|---|---|---|
 | CH1 | GPIO25 | IN1+ | IN1- to ESP32 GND / common GND | Main circulation pump |
 | CH2 | GPIO26 | IN2+ | IN2- to ESP32 GND / common GND | Pump A |
@@ -60,30 +60,33 @@ All IN- terminals may share the same ESP32 GND / common GND node.
 
 ESP32 GND, MOSFET central 负, and adapter 12V GND must be connected together as one common ground node.
 
-## MOSFET Output Wiring For Later
+## Current Pump Output Wiring
 
-Do not connect real pumps during the first MOSFET test.
+T06 passed with the main circulation pump controlled by MOSFET CH1.
 
-| MOSFET Output Pair | Later Use |
-|---|---|
-| OUT1+ / OUT1- | Main circulation pump later |
-| OUT2+ / OUT2- | Pump A later |
-| OUT3+ / OUT3- | Pump B later |
-| OUT4+ / OUT4- | Spare output later |
+The main pump now includes an external DC PWM speed controller with a knob after MOSFET OUT1:
 
-For T05, use a multimeter or a small safe 12V load to verify output switching.
+| MOSFET Output | Next Device | Final Load |
+|---|---|---|
+| OUT1+ / OUT1- | DC PWM speed controller IN+ / IN- | Main circulation pump through controller OUT+ / OUT- |
+| OUT2+ / OUT2- | Pump A + / - | Pump A direct test output |
+| OUT3+ / OUT3- | Pump B + / - | Pump B direct test output |
+| OUT4+ / OUT4- | Spare output | Not used yet |
+
+The DC PWM speed controller is hardware-only in the current phase. ESP32 still only controls main pump ON/OFF through GPIO25 and MOSFET CH1. Speed feedback or software speed control is not implemented.
+
+Do not place the speed controller before the MOSFET module power input. The speed controller must not affect Pump A or Pump B.
 
 ## Pump Mapping
 
-| Pump | Voltage | Controlled By | ESP32 GPIO | MOSFET Input |
-|---|---|---|---|---|
-| Main circulation pump | 12V DC | MOSFET CH1 | GPIO25 | IN1+ |
-| Peristaltic pump A | 12V DC | MOSFET CH2 | GPIO26 | IN2+ |
-| Peristaltic pump B | 12V DC | MOSFET CH3 | GPIO14 | IN3+ |
+| Pump | Voltage | Controlled By | ESP32 GPIO | MOSFET Input | Output Wiring |
+|---|---|---|---|---|---|
+| Main circulation pump | 12V DC | MOSFET CH1 | GPIO25 | IN1+ | OUT1 -> DC PWM speed controller -> main pump |
+| Peristaltic pump A | 12V DC | MOSFET CH2 | GPIO26 | IN2+ | OUT2 -> Pump A |
+| Peristaltic pump B | 12V DC | MOSFET CH3 | GPIO14 | IN3+ | OUT3 -> Pump B |
 
 ## Safety Notes
 
-- Do not connect pumps during the first MOSFET test.
 - Do not connect pump power directly to ESP32.
 - Do not connect +12V to any ESP32 GPIO.
 - Do not connect the MOSFET central 正 terminal to ESP32.
@@ -91,5 +94,7 @@ For T05, use a multimeter or a small safe 12V load to verify output switching.
 - IN- pins must go to ESP32 GND / common GND.
 - Adapter +12V goes only to MOSFET central 正.
 - Adapter GND goes to MOSFET central 负 and ESP32 GND.
+- Main pump speed knob is hardware-only; ESP32 does not measure or control speed in software.
+- Use clean water only for Pump A/B testing before nutrient dosing calibration.
 - Never connect 5V signal directly to ESP32 GPIO.
 - ESP32 GND, MOSFET central 负, and adapter 12V GND must be connected together.
