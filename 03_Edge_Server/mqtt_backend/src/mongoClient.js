@@ -42,6 +42,12 @@ async function ensureIndexes() {
   await database.collection('pump_logs').createIndex({ commandId: 1 });
   await database.collection('pump_calibrations').createIndex({ deviceId: 1, pump: 1, createdAt: -1 });
   await database.collection('tds_calibrations').createIndex({ deviceId: 1, createdAt: -1 });
+  await database.collection('nutrient_response_tests').createIndex({ deviceId: 1, createdAt: -1 });
+  await database.collection('nutrient_response_tests').createIndex({ testId: 1 }, { unique: true });
+  await database.collection('auto_dosing_settings').createIndex({ deviceId: 1 }, { unique: true });
+  await database.collection('dosing_runs').createIndex({ deviceId: 1, createdAt: -1 });
+  await database.collection('dosing_runs').createIndex({ runId: 1 }, { unique: true });
+  await database.collection('dosing_runs').createIndex({ status: 1, deviceId: 1 });
 
   console.log('MongoDB indexes ensured');
 }

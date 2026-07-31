@@ -66,7 +66,37 @@ function validatePumpCommand(deviceId, body) {
   };
 }
 
+function validateMainPumpStateCommand(deviceId, body) {
+  const errors = [];
+  const payload = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+  const normalizedDeviceId = typeof deviceId === 'string' ? deviceId.trim() : '';
+  const state = typeof payload.state === 'string' ? payload.state.trim().toLowerCase() : payload.state;
+
+  if (normalizedDeviceId.length === 0) {
+    errors.push('deviceId route parameter is required');
+  }
+
+  if (!['on', 'off'].includes(state)) {
+    errors.push('state must be one of: on, off');
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    value: {
+      deviceId: normalizedDeviceId,
+      pump: 'main',
+      action: 'set',
+      state,
+      reason: typeof payload.reason === 'string' && payload.reason.trim().length > 0
+        ? payload.reason.trim()
+        : 'main_pump_dashboard',
+    },
+  };
+}
+
 module.exports = {
   PUMP_LIMITS_MS,
   validatePumpCommand,
+  validateMainPumpStateCommand,
 };

@@ -10,6 +10,7 @@ String buildPumpStatusPayload(
   const String& commandId,
   const String& pump,
   const String& action,
+  const String& state,
   unsigned long durationMs,
   bool accepted,
   bool success,

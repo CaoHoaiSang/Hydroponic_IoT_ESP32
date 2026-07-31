@@ -25,6 +25,7 @@ struct PumpCommand {
   String deviceId;
   String pump;
   String action;
+  String state;
   unsigned long durationMs;
   String reason;
   String source;
@@ -61,7 +62,8 @@ void publishPumpCommandStatus(
   bool accepted,
   bool success,
   const String& status,
-  const String& message
+  const String& message,
+  const String& state = ""
 );
 void cancelActivePulse(bool publishCancel, const String& message);
 void startPulse(PulseTarget target, unsigned long durationMs, bool fromMqtt, const PumpCommand& command);
@@ -125,12 +127,14 @@ void publishPumpCommandStatus(
   bool accepted,
   bool success,
   const String& status,
-  const String& message
+  const String& message,
+  const String& state
 ) {
   String payload = buildPumpStatusPayload(
     commandId,
     pump,
     action,
+    state,
     durationMs,
     accepted,
     success,
@@ -400,6 +404,7 @@ PumpCommand parsePumpCommandPayload(const String& payload) {
   command.deviceId = "";
   command.pump = "";
   command.action = "";
+  command.state = "";
   command.durationMs = 0;
   command.reason = "";
   command.source = "";
@@ -408,6 +413,7 @@ PumpCommand parsePumpCommandPayload(const String& payload) {
   readJsonString(payload, "deviceId", command.deviceId);
   readJsonString(payload, "pump", command.pump);
   readJsonString(payload, "action", command.action);
+  readJsonString(payload, "state", command.state);
   readJsonUnsignedLong(payload, "durationMs", command.durationMs);
   readJsonString(payload, "reason", command.reason);
   readJsonString(payload, "source", command.source);
@@ -415,6 +421,8 @@ PumpCommand parsePumpCommandPayload(const String& payload) {
   command.pump = normalizePumpName(command.pump);
   command.action.trim();
   command.action.toLowerCase();
+  command.state.trim();
+  command.state.toLowerCase();
 
   return command;
 }
@@ -432,7 +440,49 @@ void rejectPumpCommand(const PumpCommand& command, const String& message) {
     false,
     false,
     "rejected",
-    message
+    message,
+    command.state
+  );
+}
+
+void handleMainPumpSetCommand(const PumpCommand& command) {
+  if (command.pump != "main") {
+    rejectPumpCommand(command, "Rejected: set action is only allowed for main pump");
+    return;
+  }
+
+  if (command.state != "on" && command.state != "off") {
+    rejectPumpCommand(command, "Rejected: state must be on or off");
+    return;
+  }
+
+  if (command.state == "on") {
+    readAndStoreSensors();
+
+    if (String(latestSensorData.waterLevel) != "normal") {
+      rejectPumpCommand(command, "Rejected: main pump can only turn on when water level is normal");
+      return;
+    }
+  }
+
+  if (activePulse == PULSE_MAIN) {
+    cancelActivePulse(true, "Pump command cancelled by main set command");
+  }
+
+  bool turnOn = command.state == "on";
+  setPumpMain(turnOn);
+  printPumpState("pumpMain", turnOn);
+
+  publishPumpCommandStatus(
+    command.commandId,
+    command.pump,
+    command.action,
+    0,
+    true,
+    true,
+    turnOn ? "set_on" : "set_off",
+    turnOn ? "Main pump turned on continuously" : "Main pump turned off",
+    command.state
   );
 }
 
@@ -451,8 +501,13 @@ void handlePumpCommandPayload(const String& payload) {
     return;
   }
 
+  if (command.action == "set") {
+    handleMainPumpSetCommand(command);
+    return;
+  }
+
   if (command.action != "pulse") {
-    rejectPumpCommand(command, "Rejected: only pulse action is allowed");
+    rejectPumpCommand(command, "Rejected: action must be pulse or set");
     return;
   }
 
@@ -523,6 +578,7 @@ void handleCommand(String command) {
   emptyCommand.commandId = "";
   emptyCommand.pump = "";
   emptyCommand.action = "pulse";
+  emptyCommand.state = "";
   emptyCommand.durationMs = DEFAULT_PULSE_MS;
 
   if (command == "help") {
@@ -623,7 +679,7 @@ void setup() {
   Serial.println("Project: Hydroponic_IoT_ESP32");
   Serial.print("Device ID: ");
   Serial.println(DEVICE_ID);
-  Serial.println("Mode: Wi-Fi + MQTT Sensor Publish + Pump Command V1");
+  Serial.println("Mode: Wi-Fi + MQTT Sensor Publish + Pump Command V2");
   Serial.print("MQTT sensor topic: ");
   Serial.println(MQTT_TOPIC_SENSOR);
   Serial.print("MQTT pump command topic: ");
@@ -631,7 +687,8 @@ void setup() {
   Serial.print("MQTT pump status topic: ");
   Serial.println(MQTT_TOPIC_PUMP_STATUS);
   Serial.println("Manual Serial commands are still enabled.");
-  Serial.println("WARNING: MQTT/API pump commands are pulse-only.");
+  Serial.println("WARNING: Pump A/B MQTT/API commands are pulse-only.");
+  Serial.println("WARNING: Main pump MQTT/API supports continuous set on/off.");
   Serial.println("WARNING: Use clean water only for Pump A/B tests.");
   Serial.println("WARNING: Main pump speed controller is hardware-only.");
 

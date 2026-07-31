@@ -247,6 +247,44 @@ h2 {
   gap: 12px;
 }
 
+.main-pump-control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(220px, 280px);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.main-pump-actions {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.main-pump-actions button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.main-pump-actions .secondary-button {
+  background: var(--neutral-text);
+}
+
+.main-pump-actions button:disabled {
+  background: var(--neutral-text);
+  cursor: not-allowed;
+}
+
 .manual-card {
   display: grid;
   gap: 8px;
@@ -360,9 +398,27 @@ h2 {
   font-weight: 700;
 }
 
+.form-subheading {
+  margin: 8px 0 2px;
+  color: #34413d;
+  font-weight: 700;
+}
+
 .calibration-form button:disabled {
   background: var(--neutral-text);
   cursor: not-allowed;
+}
+
+.checkbox-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 38px;
+}
+
+.checkbox-row input {
+  width: 18px;
+  min-height: 18px;
 }
 
 .calibration-button-row {
@@ -386,6 +442,28 @@ h2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.auto-dosing-latest {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.nutrient-layout {
+  grid-template-columns: minmax(300px, 420px) 1fr;
+}
+
+.nutrient-form {
+  max-height: 860px;
+  overflow: auto;
+}
+
+.nutrient-response-latest {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-content: start;
 }
 
 .calibration-history-wrap {
@@ -543,9 +621,15 @@ tbody tr:last-child td {
     grid-template-columns: 1fr;
   }
 
+  .main-pump-control-grid {
+    grid-template-columns: 1fr;
+  }
+
   .calibration-layout,
   .calibration-latest,
-  .tds-calibration-latest {
+  .tds-calibration-latest,
+  .auto-dosing-latest,
+  .nutrient-response-latest {
     grid-template-columns: 1fr;
   }
 

@@ -102,6 +102,7 @@ String buildPumpStatusPayload(
   const String& commandId,
   const String& pump,
   const String& action,
+  const String& state,
   unsigned long durationMs,
   bool accepted,
   bool success,
@@ -127,6 +128,12 @@ String buildPumpStatusPayload(
   payload += "  \"action\": \"";
   payload += escapeJsonString(action);
   payload += "\",\n";
+
+  if (state.length() > 0) {
+    payload += "  \"state\": \"";
+    payload += escapeJsonString(state);
+    payload += "\",\n";
+  }
 
   payload += "  \"durationMs\": ";
   payload += durationMs;

@@ -30,12 +30,20 @@ function validatePumpStatusPayload(payload) {
     errors.push('pump must be one of: main, A, B');
   }
 
-  if (payload.action !== 'pulse') {
-    errors.push('action must be pulse');
+  if (!['pulse', 'set'].includes(payload.action)) {
+    errors.push('action must be one of: pulse, set');
+  }
+
+  if (payload.action === 'set' && !['on', 'off'].includes(payload.state)) {
+    errors.push('state must be one of: on, off for set action');
   }
 
   if (!isNumber(payload.durationMs)) {
     errors.push('durationMs must be a number');
+  } else if (payload.action === 'pulse' && payload.durationMs <= 0) {
+    errors.push('durationMs must be greater than 0 for pulse action');
+  } else if (payload.action === 'set' && payload.durationMs < 0) {
+    errors.push('durationMs must be 0 or greater for set action');
   }
 
   if (typeof payload.accepted !== 'boolean') {
@@ -106,6 +114,7 @@ async function savePumpStatusPayload(payload, topic) {
     pump: payload.pump,
     pumpType: payload.pump,
     action: payload.action,
+    state: payload.state,
     durationMs: payload.durationMs,
     accepted: payload.accepted,
     success: payload.success,

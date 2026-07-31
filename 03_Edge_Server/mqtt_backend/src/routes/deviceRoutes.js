@@ -8,6 +8,12 @@ const {
   getLatestAlerts,
 } = require('../services/alertService');
 const {
+  getActiveDosingRun,
+  getAutoDosingSettings,
+  getDosingRuns,
+  updateAutoDosingSettings,
+} = require('../services/autoDosingService');
+const {
   getAllDevices,
   getDeviceById,
   getLatestSensorLogs,
@@ -18,7 +24,16 @@ const {
   getPumpCalibrationHistory,
   savePumpCalibration,
 } = require('../services/pumpCalibrationService');
-const { sendPumpCommand } = require('../services/pumpCommandService');
+const {
+  getLatestNutrientResponseTest,
+  getNutrientResponseSummary,
+  getNutrientResponseTests,
+  saveNutrientResponseTest,
+} = require('../services/nutrientResponseService');
+const {
+  sendMainPumpStateCommand,
+  sendPumpCommand,
+} = require('../services/pumpCommandService');
 const {
   getLatestTdsCalibration,
   getTdsCalibrationHistory,
@@ -142,6 +157,21 @@ router.post('/api/devices/:deviceId/pump-command', async (request, response) => 
   }
 });
 
+router.post('/api/devices/:deviceId/pumps/main/state', async (request, response) => {
+  try {
+    const result = await sendMainPumpStateCommand(request.params.deviceId, request.body);
+
+    if (!result.ok) {
+      response.status(400).json(result);
+      return;
+    }
+
+    response.json(result);
+  } catch (error) {
+    sendInternalServerError(response, error);
+  }
+});
+
 router.post('/api/devices/:deviceId/pump-calibration', async (request, response) => {
   try {
     const result = await savePumpCalibration(request.params.deviceId, request.body);
@@ -237,6 +267,126 @@ router.get('/api/devices/:deviceId/tds-calibrations', async (request, response) 
       deviceId: request.params.deviceId,
       count: calibrations.length,
       data: calibrations,
+    });
+  } catch (error) {
+    sendInternalServerError(response, error);
+  }
+});
+
+router.post('/api/devices/:deviceId/nutrient-response-tests', async (request, response) => {
+  try {
+    const result = await saveNutrientResponseTest(request.params.deviceId, request.body);
+
+    if (!result.ok) {
+      response.status(400).json(result);
+      return;
+    }
+
+    response.json(result);
+  } catch (error) {
+    sendInternalServerError(response, error);
+  }
+});
+
+router.get('/api/devices/:deviceId/nutrient-response-tests', async (request, response) => {
+  try {
+    const tests = await getNutrientResponseTests(request.params.deviceId, request.query.limit);
+
+    response.json({
+      ok: true,
+      deviceId: request.params.deviceId,
+      count: tests.length,
+      data: tests,
+    });
+  } catch (error) {
+    sendInternalServerError(response, error);
+  }
+});
+
+router.get('/api/devices/:deviceId/nutrient-response-tests/latest', async (request, response) => {
+  try {
+    const test = await getLatestNutrientResponseTest(request.params.deviceId);
+
+    response.json({
+      ok: true,
+      deviceId: request.params.deviceId,
+      data: test || null,
+    });
+  } catch (error) {
+    sendInternalServerError(response, error);
+  }
+});
+
+router.get('/api/devices/:deviceId/nutrient-response-summary', async (request, response) => {
+  try {
+    const summary = await getNutrientResponseSummary(request.params.deviceId);
+
+    response.json({
+      ok: true,
+      deviceId: request.params.deviceId,
+      data: summary,
+    });
+  } catch (error) {
+    sendInternalServerError(response, error);
+  }
+});
+
+router.get('/api/devices/:deviceId/auto-dosing/settings', async (request, response) => {
+  try {
+    const settings = await getAutoDosingSettings(request.params.deviceId);
+
+    response.json({
+      ok: true,
+      deviceId: request.params.deviceId,
+      data: settings,
+    });
+  } catch (error) {
+    sendInternalServerError(response, error);
+  }
+});
+
+router.put('/api/devices/:deviceId/auto-dosing/settings', async (request, response) => {
+  try {
+    const result = await updateAutoDosingSettings(request.params.deviceId, request.body);
+
+    if (!result.ok) {
+      response.status(400).json(result);
+      return;
+    }
+
+    response.json({
+      ok: true,
+      deviceId: request.params.deviceId,
+      data: result.data,
+    });
+  } catch (error) {
+    sendInternalServerError(response, error);
+  }
+});
+
+router.get('/api/devices/:deviceId/auto-dosing/runs', async (request, response) => {
+  try {
+    const runs = await getDosingRuns(request.params.deviceId, request.query.limit);
+
+    response.json({
+      ok: true,
+      deviceId: request.params.deviceId,
+      count: runs.length,
+      data: runs,
+    });
+  } catch (error) {
+    sendInternalServerError(response, error);
+  }
+});
+
+router.get('/api/devices/:deviceId/auto-dosing/active-run', async (request, response) => {
+  try {
+    const activeRun = await getActiveDosingRun(request.params.deviceId);
+
+    response.json({
+      ok: true,
+      deviceId: request.params.deviceId,
+      data: activeRun || null,
     });
   } catch (error) {
     sendInternalServerError(response, error);

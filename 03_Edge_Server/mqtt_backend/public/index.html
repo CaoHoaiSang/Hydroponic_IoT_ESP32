@@ -80,7 +80,9 @@
           <ol class="calibration-steps">
             <li>Put TDS probe into solution.</li>
             <li>Wait for TDS voltage to stabilize.</li>
-            <li>Read reference ppm using external TDS meter.</li>
+            <li>Use ppm mode on external TDS meter.</li>
+            <li>The backend normalizes sensor voltage to 25°C before calibration.</li>
+            <li>For better accuracy, save at least two calibration points: one low ppm point and one high ppm point.</li>
             <li>Save calibration.</li>
             <li>Backend will estimate tdsPpm from future sensor payloads.</li>
           </ol>
@@ -108,7 +110,47 @@
             </form>
             <div class="tds-calibration-latest">
               <article class="metric-card">
-                <span class="metric-label">Factor</span>
+                <span class="metric-label">Current raw voltage</span>
+                <strong id="currentTdsRawVoltage" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Current voltage @25°C</span>
+                <strong id="currentTdsVoltage25" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Temperature compensation</span>
+                <strong id="currentTdsTempComp" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Temperature coefficient</span>
+                <strong id="currentTdsTempCoeff" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Temperature reference</span>
+                <strong id="currentTdsTempReference" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Current TDS PPM</span>
+                <strong id="currentTdsPpmValue" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Calibration mode</span>
+                <strong id="currentTdsMode" class="metric-value compact-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Point count</span>
+                <strong id="currentTdsPointCount" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">In range</span>
+                <strong id="currentTdsInRange" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Warning</span>
+                <strong id="currentTdsWarning" class="metric-value compact-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Latest point factor</span>
                 <strong id="latestTdsFactor" class="metric-value">N/A</strong>
               </article>
               <article class="metric-card">
@@ -116,8 +158,16 @@
                 <strong id="latestTdsReferencePpm" class="metric-value">N/A</strong>
               </article>
               <article class="metric-card">
-                <span class="metric-label">Measured voltage</span>
+                <span class="metric-label">Latest raw voltage</span>
                 <strong id="latestTdsMeasuredVoltage" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Latest voltage @25°C</span>
+                <strong id="latestTdsMeasuredVoltage25" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Calibration water temp</span>
+                <strong id="latestTdsWaterTemp" class="metric-value">N/A</strong>
               </article>
               <article class="metric-card">
                 <span class="metric-label">Calibrated at</span>
@@ -132,6 +182,7 @@
                   <th>Time</th>
                   <th>Raw</th>
                   <th>Voltage</th>
+                  <th>Voltage @25°C</th>
                   <th>Reference ppm</th>
                   <th>Factor ppm/V</th>
                   <th>Water Temp</th>
@@ -140,7 +191,7 @@
               </thead>
               <tbody id="tdsCalibrationHistoryBody">
                 <tr>
-                  <td colspan="7">Loading TDS calibration history...</td>
+                  <td colspan="8">Loading TDS calibration history...</td>
                 </tr>
               </tbody>
             </table>
@@ -173,6 +224,34 @@
         </div>
       </section>
 
+      <section class="section-block" aria-labelledby="mainPumpControlTitle">
+        <div class="section-heading">
+          <h2 id="mainPumpControlTitle">Main Pump Continuous Control</h2>
+          <span id="mainPumpContinuousStatus" class="meta-text">Continuous main pump control</span>
+        </div>
+        <div class="manual-panel">
+          <div class="warning-list">
+            <p>Main pump should be ON during mixing, nutrient response tests, and Auto Dosing.</p>
+            <p>Continuous ON/OFF is only available for the main circulation pump.</p>
+            <p>Pump A and Pump B remain pulse-only for safety.</p>
+          </div>
+          <div class="main-pump-control-grid">
+            <article class="metric-card">
+              <span class="metric-label">Current main pump status</span>
+              <strong id="mainPumpContinuousValue" class="metric-value">N/A</strong>
+            </article>
+            <article class="metric-card">
+              <span class="metric-label">Last command result</span>
+              <strong id="mainPumpLastCommandValue" class="metric-value compact-value">No command sent</strong>
+            </article>
+            <div class="main-pump-actions">
+              <button id="mainPumpOnButton" type="button">Turn Main Pump ON</button>
+              <button id="mainPumpOffButton" class="secondary-button" type="button">Turn Main Pump OFF</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="section-block" aria-labelledby="manualPumpTitle">
         <div class="section-heading">
           <h2 id="manualPumpTitle">Manual Pump Test</h2>
@@ -181,7 +260,7 @@
         <div class="manual-panel">
           <div class="warning-list">
             <p>Pump A/B should use clean water unless doing real dosing later.</p>
-            <p>Commands are pulse-only. Do not use if water level is low.</p>
+            <p>Timed pulse commands stay available for testing. Pump A/B are always pulse-only.</p>
           </div>
           <div class="manual-grid">
             <article class="manual-card">
@@ -274,6 +353,302 @@
             </table>
           </div>
           <p id="calibrationHistoryStatus" class="meta-text calibration-history-status">Latest 10 rows</p>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="nutrientResponseTitle">
+        <div class="section-heading">
+          <h2 id="nutrientResponseTitle">Nutrient Response Tests</h2>
+          <span id="nutrientResponseStatus" class="meta-text">Latest nutrient response tests</span>
+        </div>
+        <div class="calibration-panel">
+          <div class="warning-list">
+            <p>This section logs experimental data only. It does not run pumps.</p>
+            <p>Current note: 16L, TDS sensor 5V, main pump ON, Auto Dosing OFF, 1 ml A + 1 ml B, stable after 15 minutes.</p>
+            <p>Preliminary response estimate: +20 to +40 ppm per 1 ml A + 1 ml B pair.</p>
+          </div>
+          <div class="calibration-layout nutrient-layout">
+            <form id="nutrientResponseForm" class="calibration-form nutrient-form">
+              <p class="form-subheading">Test setup</p>
+              <label for="nutrientWorkingLevelInput">Working level liters</label>
+              <input id="nutrientWorkingLevelInput" type="number" min="0.1" step="0.1" value="16">
+
+              <label for="nutrientTdsSupplyInput">TDS sensor supply</label>
+              <input id="nutrientTdsSupplyInput" type="text" maxlength="20" value="5V">
+
+              <label class="checkbox-row" for="nutrientMainPumpOnInput">
+                <input id="nutrientMainPumpOnInput" type="checkbox" checked>
+                <span>Main pump ON</span>
+              </label>
+
+              <label class="checkbox-row" for="nutrientAutoDosingEnabledInput">
+                <input id="nutrientAutoDosingEnabledInput" type="checkbox">
+                <span>Auto Dosing enabled during test</span>
+              </label>
+
+              <p class="form-subheading">Before dose</p>
+              <label for="nutrientBeforeDashboardValuesInput">Dashboard TDS values, comma separated</label>
+              <input id="nutrientBeforeDashboardValuesInput" type="text" placeholder="754, 758, 756">
+              <button id="fillNutrientBeforeButton" class="secondary-button" type="button">Fill Before From Latest 5 Logs</button>
+
+              <label for="nutrientBeforePenMainInput">Main pen ppm before</label>
+              <input id="nutrientBeforePenMainInput" type="number" step="0.1">
+
+              <label for="nutrientBeforePenSecondaryInput">Secondary pen ppm before</label>
+              <input id="nutrientBeforePenSecondaryInput" type="number" step="0.1">
+
+              <label for="nutrientBeforeWaterTempMainInput">Main pen temp before</label>
+              <input id="nutrientBeforeWaterTempMainInput" type="number" step="0.01">
+
+              <label for="nutrientBeforeWaterTempSecondaryInput">Secondary pen temp before</label>
+              <input id="nutrientBeforeWaterTempSecondaryInput" type="number" step="0.01">
+
+              <label for="nutrientBeforeWaterTempSensorInput">Sensor temp before</label>
+              <input id="nutrientBeforeWaterTempSensorInput" type="number" step="0.01">
+
+              <label for="nutrientBeforeWaterLevelInput">Water level before</label>
+              <select id="nutrientBeforeWaterLevelInput">
+                <option value="normal">normal</option>
+                <option value="low">low</option>
+                <option value="error">error</option>
+              </select>
+
+              <p class="form-subheading">Dose record</p>
+              <label for="nutrientPumpAMlInput">Pump A ml</label>
+              <input id="nutrientPumpAMlInput" type="number" min="0.1" step="0.1" value="1">
+
+              <label for="nutrientPumpBMlInput">Pump B ml</label>
+              <input id="nutrientPumpBMlInput" type="number" min="0.1" step="0.1" value="1">
+
+              <label for="nutrientPumpADurationInput">Pump A duration ms</label>
+              <input id="nutrientPumpADurationInput" type="number" min="1" step="1" value="500">
+
+              <label for="nutrientPumpBDurationInput">Pump B duration ms</label>
+              <input id="nutrientPumpBDurationInput" type="number" min="1" step="1" value="556">
+
+              <label class="checkbox-row" for="nutrientPumpACompletedInput">
+                <input id="nutrientPumpACompletedInput" type="checkbox" checked>
+                <span>Pump A completed</span>
+              </label>
+
+              <label class="checkbox-row" for="nutrientPumpBCompletedInput">
+                <input id="nutrientPumpBCompletedInput" type="checkbox" checked>
+                <span>Pump B completed</span>
+              </label>
+
+              <p class="form-subheading">After mixing</p>
+              <label for="nutrientAfter5DashboardInput">After 5 min dashboard ppm</label>
+              <input id="nutrientAfter5DashboardInput" type="number" step="0.1">
+
+              <label for="nutrientAfter5PenMainInput">After 5 min main pen ppm</label>
+              <input id="nutrientAfter5PenMainInput" type="number" step="0.1">
+
+              <label for="nutrientAfter5PenSecondaryInput">After 5 min secondary pen ppm</label>
+              <input id="nutrientAfter5PenSecondaryInput" type="number" step="0.1">
+
+              <label for="nutrientAfter10DashboardInput">After 10 min dashboard ppm</label>
+              <input id="nutrientAfter10DashboardInput" type="number" step="0.1">
+
+              <label for="nutrientAfter10PenMainInput">After 10 min main pen ppm</label>
+              <input id="nutrientAfter10PenMainInput" type="number" step="0.1">
+
+              <label for="nutrientAfter10PenSecondaryInput">After 10 min secondary pen ppm</label>
+              <input id="nutrientAfter10PenSecondaryInput" type="number" step="0.1">
+
+              <label for="nutrientAfter15DashboardValuesInput">After 15 min dashboard values, comma separated</label>
+              <input id="nutrientAfter15DashboardValuesInput" type="text" placeholder="785, 790, 788">
+              <button id="fillNutrientAfter15Button" class="secondary-button" type="button">Fill After 15 From Latest 5 Logs</button>
+
+              <label for="nutrientAfter15PenMainInput">After 15 min main pen ppm</label>
+              <input id="nutrientAfter15PenMainInput" type="number" step="0.1">
+
+              <label for="nutrientAfter15PenSecondaryInput">After 15 min secondary pen ppm</label>
+              <input id="nutrientAfter15PenSecondaryInput" type="number" step="0.1">
+
+              <label for="nutrientAfter15WaterTempMainInput">After 15 min main pen temp</label>
+              <input id="nutrientAfter15WaterTempMainInput" type="number" step="0.01">
+
+              <label for="nutrientAfter15WaterTempSecondaryInput">After 15 min secondary pen temp</label>
+              <input id="nutrientAfter15WaterTempSecondaryInput" type="number" step="0.01">
+
+              <label for="nutrientAfter15WaterTempSensorInput">After 15 min sensor temp</label>
+              <input id="nutrientAfter15WaterTempSensorInput" type="number" step="0.01">
+
+              <label for="nutrientMixingTimeInput">Mixing time used minutes</label>
+              <input id="nutrientMixingTimeInput" type="number" min="1" step="1" value="15">
+
+              <label for="nutrientNoteInput">Note</label>
+              <input id="nutrientNoteInput" type="text" maxlength="180" placeholder="response test 2-4 clean-water record">
+
+              <button id="saveNutrientResponseButton" type="submit">Save Nutrient Response Test</button>
+            </form>
+            <div class="nutrient-response-latest">
+              <article class="metric-card">
+                <span class="metric-label">Latest dashboard delta</span>
+                <strong id="nutrientLatestDeltaDashboard" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Latest main pen delta</span>
+                <strong id="nutrientLatestDeltaPenMain" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Latest secondary pen delta</span>
+                <strong id="nutrientLatestDeltaPenSecondary" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Latest response estimate</span>
+                <strong id="nutrientLatestResponseEstimate" class="metric-value compact-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Average dashboard delta</span>
+                <strong id="nutrientSummaryDeltaDashboard" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Average main pen delta</span>
+                <strong id="nutrientSummaryDeltaPenMain" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Average secondary pen delta</span>
+                <strong id="nutrientSummaryDeltaPenSecondary" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Recommended range</span>
+                <strong id="nutrientSummaryRange" class="metric-value compact-value">20-40 ppm/pair</strong>
+              </article>
+            </div>
+          </div>
+          <div class="table-wrap calibration-history-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Level L</th>
+                  <th>Before avg</th>
+                  <th>After 15 avg</th>
+                  <th>Delta dashboard</th>
+                  <th>Delta pen main</th>
+                  <th>Response estimate</th>
+                  <th>Note</th>
+                </tr>
+              </thead>
+              <tbody id="nutrientResponseHistoryBody">
+                <tr>
+                  <td colspan="8">Loading nutrient response tests...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p id="nutrientResponseHistoryStatus" class="meta-text calibration-history-status">Latest 10 tests</p>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="autoDosingTitle">
+        <div class="section-heading">
+          <h2 id="autoDosingTitle">Auto Dosing V2</h2>
+          <span id="autoDosingStatus" class="meta-text">Loading auto dosing...</span>
+        </div>
+        <div class="calibration-panel">
+          <div class="warning-list">
+            <p>Auto Dosing is disabled by default.</p>
+            <p>Test with clean water before using nutrient bottles.</p>
+            <p>Closed-loop step dosing pulses Pump A, then Pump B, waits for mixing, then re-checks TDS.</p>
+            <p>No large one-shot dosing. Pump A/B remain pulse-only.</p>
+            <p>Main pump must be ON when Require main pump ON is enabled.</p>
+          </div>
+          <div class="calibration-layout">
+            <form id="autoDosingSettingsForm" class="calibration-form">
+              <p class="form-subheading">Mode: Closed-loop Step Dosing V2</p>
+              <label class="checkbox-row" for="autoDosingEnabledInput">
+                <input id="autoDosingEnabledInput" type="checkbox">
+                <span>Enabled</span>
+              </label>
+
+              <label for="autoTargetMinInput">Target min ppm</label>
+              <input id="autoTargetMinInput" type="number" min="1" step="1" value="800">
+
+              <label for="autoTargetMaxInput">Target max ppm</label>
+              <input id="autoTargetMaxInput" type="number" min="1" step="1" value="1200">
+
+              <label for="autoDoseMlInput">Step dose ml per pump</label>
+              <input id="autoDoseMlInput" type="number" min="0.1" max="10" step="0.1" value="1">
+
+              <label for="autoMixingDelayMinutesInput">Mixing delay minutes</label>
+              <input id="autoMixingDelayMinutesInput" type="number" min="1" step="1" value="15">
+
+              <label for="autoMaxDoseMlInput">Max dose ml per pump per run</label>
+              <input id="autoMaxDoseMlInput" type="number" min="0.1" max="10" step="0.1" value="1">
+
+              <label for="autoMaxDailyDoseMlInput">Max daily dose ml per pump</label>
+              <input id="autoMaxDailyDoseMlInput" type="number" min="0.1" max="100" step="0.1" value="10">
+
+              <label class="checkbox-row" for="autoRequireMainPumpOnInput">
+                <input id="autoRequireMainPumpOnInput" type="checkbox" checked>
+                <span>Require main pump ON</span>
+              </label>
+
+              <label for="autoResponseEstimateInput">Response estimate ppm per ml pair</label>
+              <input id="autoResponseEstimateInput" type="number" min="1" step="0.1" value="30">
+
+              <label for="autoResponseWorkingLevelInput">Response estimate working level liters</label>
+              <input id="autoResponseWorkingLevelInput" type="number" min="0.1" step="0.1" value="16">
+
+              <button id="saveAutoDosingSettingsButton" type="submit">Save Settings</button>
+            </form>
+            <div class="auto-dosing-latest">
+              <article class="metric-card">
+                <span class="metric-label">Mode</span>
+                <strong id="autoModeValue" class="metric-value compact-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Current state</span>
+                <strong id="autoDosingEnabledValue" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Last evaluation reason</span>
+                <strong id="autoDosingReasonValue" class="metric-value compact-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Last evaluation TDS</span>
+                <strong id="autoDosingTdsValue" class="metric-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Active run</span>
+                <strong id="autoDosingActiveRunValue" class="metric-value compact-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Mixing until</span>
+                <strong id="autoMixingUntilValue" class="metric-value compact-value">N/A</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Daily dose used</span>
+                <strong id="autoDailyDoseValue" class="metric-value">N/A</strong>
+              </article>
+            </div>
+          </div>
+          <div class="table-wrap calibration-history-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Mode</th>
+                  <th>Status</th>
+                  <th>TDS start</th>
+                  <th>TDS after</th>
+                  <th>Delta</th>
+                  <th>Step ml</th>
+                  <th>Mixing until</th>
+                  <th>Pump A</th>
+                  <th>Pump B</th>
+                </tr>
+              </thead>
+              <tbody id="autoDosingRunsBody">
+                <tr>
+                  <td colspan="9">Loading dosing runs...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p id="autoDosingRunsStatus" class="meta-text calibration-history-status">Latest 10 runs</p>
         </div>
       </section>
 
