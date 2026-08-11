@@ -4,18 +4,22 @@ const mqtt = require('mqtt');
 const { MongoClient } = require('mongodb');
 
 const CONFIG = Object.freeze({
-  mongoUri: 'mongodb://127.0.0.1:27018',
-  databaseName: 'hydroponic_stage0',
-  mqttUrl: 'mqtt://127.0.0.1:18884',
-  httpUrl: 'http://127.0.0.1:3100',
-  sensorTopic: 'stage0/hydroponic/device001/sensor',
-  pumpCommandTopic: 'stage0/hydroponic/device001/pump/cmd',
+  stageName: process.env.STAGING_CHECK_NAME || 'stage0',
+  serviceName: process.env.STAGING_SERVICE_NAME || 'hydroponic-stage0-backend',
+  mongoUri: process.env.STAGING_MONGO_URI || 'mongodb://127.0.0.1:27018',
+  databaseName: process.env.STAGING_DATABASE_NAME || 'hydroponic_stage0',
+  mqttUrl: process.env.STAGING_MQTT_URL || 'mqtt://127.0.0.1:18884',
+  mqttUsername: process.env.STAGING_MQTT_USERNAME || '',
+  mqttPassword: process.env.STAGING_MQTT_PASSWORD || '',
+  httpUrl: process.env.STAGING_HTTP_URL || 'http://127.0.0.1:3100',
+  sensorTopic: process.env.STAGING_SENSOR_TOPIC || 'stage0/hydroponic/device001/sensor',
+  pumpCommandTopic: process.env.STAGING_PUMP_COMMAND_TOPIC || 'stage0/hydroponic/device001/pump/cmd',
 });
 
 const DEVICE_ID = 'device001';
 const BOOT_A = 'stageboot0001';
 const BOOT_B = 'stageboot0002';
-const SET_ID = 'stage0_ec_set';
+const SET_ID = `${CONFIG.stageName}_ec_set`;
 const COLLECTIONS = [
   'alerts',
   'auto_dosing_events',
@@ -32,11 +36,9 @@ const COLLECTIONS = [
 ];
 
 function assertIsolatedConfiguration() {
-  assert.equal(CONFIG.mongoUri, 'mongodb://127.0.0.1:27018');
-  assert.equal(CONFIG.databaseName, 'hydroponic_stage0');
-  assert.equal(CONFIG.mqttUrl, 'mqtt://127.0.0.1:18884');
-  assert.ok(CONFIG.sensorTopic.startsWith('stage0/'));
-  assert.ok(CONFIG.pumpCommandTopic.startsWith('stage0/'));
+  assert.match(CONFIG.databaseName, /stage/i);
+  assert.match(CONFIG.sensorTopic, /^stage\w*\/hydroponic\//);
+  assert.match(CONFIG.pumpCommandTopic, /^stage\w*\/hydroponic\//);
   assert.notEqual(new URL(CONFIG.mongoUri).port, '27017');
   assert.notEqual(new URL(CONFIG.mqttUrl).port, '1883');
 }
@@ -188,10 +190,12 @@ async function main() {
 
   const mongoClient = new MongoClient(CONFIG.mongoUri, { serverSelectionTimeoutMS: 5000 });
   const mqttClient = mqtt.connect(CONFIG.mqttUrl, {
-    clientId: `phase22b-stage0-check-${process.pid}`,
+    clientId: `phase22b-${CONFIG.stageName}-check-${process.pid}`,
     clean: true,
     reconnectPeriod: 0,
     connectTimeout: 5000,
+    username: CONFIG.mqttUsername || undefined,
+    password: CONFIG.mqttPassword || undefined,
   });
   let pumpCommandCount = 0;
 
@@ -199,7 +203,7 @@ async function main() {
     const health = await waitFor(async () => {
       const result = await fetchJson('/health');
       return result.status === 200
-        && result.body.service === 'hydroponic-stage0-backend'
+        && result.body.service === CONFIG.serviceName
         && result.body.mongoConnected === true
         && result.body.mqttConnected === true
         ? result.body
@@ -209,7 +213,7 @@ async function main() {
 
     await mongoClient.connect();
     const database = mongoClient.db(CONFIG.databaseName);
-    assert.equal(database.databaseName, 'hydroponic_stage0');
+    assert.equal(database.databaseName, CONFIG.databaseName);
     await seedStage0(database);
 
     if (!mqttClient.connected) {
@@ -412,7 +416,11 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(`Phase 22B Stage 0 check failed: ${error.stack || error.message}`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(`Phase 22B ${CONFIG.stageName} check failed: ${error.stack || error.message}`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { main };

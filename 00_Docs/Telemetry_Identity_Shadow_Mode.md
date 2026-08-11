@@ -1,4 +1,4 @@
-# Telemetry Identity V2 And Shadow Mode - Phase 22A Fix 2 / Phase 22B Stage 0
+# Telemetry Identity V2 And Shadow Mode - Phase 22A Fix 2 / Phase 22B Stage 1 Preflight
 
 ## Firmware Identity
 
@@ -167,3 +167,10 @@ duplicate/retry idempotency, out-of-order and delayed data, three distinct stabl
 measurements, Shadow history, API/Dashboard responses, Auto Dosing OFF, zero pump command,
 and zero dosing run. Production services, credentials, firmware upload, and physical
 hardware are not used.
+
+Phase 22B Stage 1 Preflight has also run against separate isolated services on MongoDB
+`127.0.0.1:27019`, backend `127.0.0.1:3101`, and authenticated MQTT listeners limited to
+`127.0.0.1:18885` and the machine's private LAN IPv4 on port `18885`. Firmware/backend topics
+match the `stage1/hydroponic/device001/...` namespace. Runtime checks pass with zero pump
+command delivery, zero dosing run, and Auto Dosing OFF. The USB Stage 1 firmware profile
+compiled at 938548 bytes flash (71%) and 47208 bytes static RAM (14%); it was not uploaded.

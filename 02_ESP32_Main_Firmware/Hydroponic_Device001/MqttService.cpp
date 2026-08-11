@@ -4,7 +4,11 @@
 #include <WiFi.h>
 
 #include "Config.h"
+#if HYDROPONIC_BUILD_PROFILE == HYDROPONIC_PROFILE_USB_STAGE1
+#include "SecretsStage1.h"
+#else
 #include "Secrets.h"
+#endif
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
@@ -75,11 +79,15 @@ static void connectMqttIfNeeded() {
 
   if (connected) {
     Serial.println("MQTT connected");
-    if (mqttClient.subscribe(MQTT_TOPIC_PUMP_CMD)) {
-      Serial.print("Subscribed to ");
-      Serial.println(MQTT_TOPIC_PUMP_CMD);
+    if (MQTT_PUMP_COMMANDS_ENABLED) {
+      if (mqttClient.subscribe(MQTT_TOPIC_PUMP_CMD)) {
+        Serial.print("Subscribed to ");
+        Serial.println(MQTT_TOPIC_PUMP_CMD);
+      } else {
+        Serial.println("MQTT subscribe failed");
+      }
     } else {
-      Serial.println("MQTT subscribe failed");
+      Serial.println("MQTT pump command subscription: DISABLED BY BUILD PROFILE");
     }
   } else {
     Serial.print("MQTT connect failed, state: ");

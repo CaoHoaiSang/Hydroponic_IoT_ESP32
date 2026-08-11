@@ -7,8 +7,8 @@
 
 ## 2. Current Project Phase
 
-- Current phase: Phase 22B Stage 0 - Isolated Staging Preparation
-- Short description: A repeatable loopback-only MongoDB, MQTT, backend, Shadow Mode, API, and Dashboard staging stack is implemented and runtime-tested. Auto Dosing remains locked OFF, pump command services and publisher are disabled in staging, and no production endpoint, credential, firmware upload, or hardware was used.
+- Current phase: Phase 22B Stage 1 Preflight
+- Short description: Authenticated MQTT is bound only to loopback and the private LAN IPv4, firmware/backend topics match the `stage1/` namespace, and the USB Stage 1 firmware profile has a compile-tested actuator lock. Runtime staging passed with Auto Dosing OFF, zero pump command, and zero dosing run. Physical ESP32 networking remains unverified because staging Wi-Fi credentials were not configured and firmware was not uploaded.
 
 ## 3. Completed Tasks
 
@@ -43,6 +43,7 @@
 | 27 | Phase 22A Shadow Mode | Implemented | Pure 30-gate engine, one decision per accepted measurement, read-only APIs, dashboard status/history, and zero-side-effect tests implemented. Runtime test on operational services is waiting. |
 | 28 | Phase 22A Fix 2 independent re-audit | Done | Expired `PROCESSING` lease claim is now atomic by state, lease, and attempt. Full suite: 173 passed, 0 failed, 0 skipped. Full Arduino compile passed; no upload. |
 | 29 | Phase 22B Stage 0 isolated staging | Done | Real isolated MongoDB/MQTT/backend/Dashboard runtime PASS on ports 27018/18884/3100. Stop/reset/start repeatability PASS; Auto Dosing OFF, zero pump command, zero dosing run. |
+| 30 | Phase 22B Stage 1 Preflight | Partial | LAN MQTT/auth/ACL, topic parity, actuator lock, lifecycle, runtime integration, regression, and full profile compile passed. Physical Wi-Fi path is not configured or tested; no firmware upload or hardware use occurred. |
 
 ## 4. Created Folders
 

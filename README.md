@@ -5,19 +5,19 @@ DS18B20 water temperature, water-level interlocks, MQTT, a local Edge Server, an
 
 ## Current Phase
 
-Phase 22B Stage 0 provides an isolated local staging stack for MongoDB, MQTT, the backend,
-Shadow Mode, APIs, and the Dashboard. It uses loopback-only ports and `stage0/` MQTT topics,
-contains no production credential, keeps Auto Dosing hard-locked OFF, and disables both
-manual pump service paths and the MQTT pump publisher through
-`PUMP_COMMANDS_DISABLED=true`.
+Phase 22B Stage 1 Preflight adds an authenticated LAN-reachable MQTT profile without exposing
+MongoDB or the backend beyond loopback. Firmware compiled with the USB Stage 1 profile uses
+`stage1/` topics, never subscribes to pump commands, rejects Serial/MQTT actuator requests,
+and continuously forces every pump output OFF. Auto Dosing and both backend pump publisher
+paths remain locked.
 
 Phase 22A Fix 2 is the staging baseline. It preserves Telemetry Identity V2, duplicate and
 order protection, three-distinct-measurement stability, and side-effect-free Shadow Mode.
 Fix 2 also makes concurrent expired processing-lease recovery single-owner and idempotent.
 
-The full Phase 22A Fix 2 firmware compiled successfully with Arduino CLI 1.5.1, ESP32 core
-3.3.10, and the verified Arduino IDE FQBN: flash 943700 bytes (71%) and static RAM 47208
-bytes (14%). Firmware was not uploaded. Stage 0 does not require an ESP32 or hardware.
+The full USB Stage 1 firmware profile compiled successfully with Arduino CLI 1.5.1 and ESP32
+core 3.3.10: flash 938548 bytes (71%) and static RAM 47208 bytes (14%). Firmware was not
+uploaded and no ESP32 or hardware was connected.
 
 Phase 21 hardens EC/TDS calibration and Auto Dosing safety. Calibration is EC-first,
 uses explicit `draft -> active -> retired` sets, and converts EC to TDS with scale 500
@@ -81,6 +81,24 @@ powershell -ExecutionPolicy Bypass -File .\staging\Reset-Staging.ps1
 
 See `03_Edge_Server/mqtt_backend/staging/README.md` for the isolation contract, topics,
 repeatable lifecycle commands, and executable Stage 0 coverage.
+
+## Phase 22B Stage 1 Preflight
+
+Stage 1 uses MongoDB `127.0.0.1:27019`, backend/Dashboard `127.0.0.1:3101`, and authenticated
+MQTT on `127.0.0.1:18885` plus the selected private LAN IPv4 on port `18885`. The generated
+broker runtime config, credentials, data, logs, and `SecretsStage1.h` are ignored by Git.
+
+```powershell
+cd 03_Edge_Server\mqtt_backend\staging\stage1
+.\Start-Stage1-Preflight.ps1
+node .\runStage1PreflightChecks.js
+.\Get-Stage1-Status.ps1
+.\Stop-Stage1-Preflight.ps1
+.\Reset-Stage1-Preflight.ps1
+```
+
+Set `STAGE1_WIFI_SSID` and `STAGE1_WIFI_PASSWORD` only in the current process before start
+when preparing a physical Stage 1 flash. Do not commit or report their values.
 
 See `00_Docs/Telemetry_Identity_Shadow_Mode.md` for the V2 payload, boot transition,
 duplicate/order policy, Shadow gates, indexes, and read-only APIs.

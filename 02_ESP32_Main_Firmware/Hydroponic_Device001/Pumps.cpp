@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 
+#include "ActuatorSafety.h"
 #include "Config.h"
 
 bool pumpMainState = false;
@@ -27,11 +28,13 @@ void pumpsBegin() {
 }
 
 void setPumpMain(bool on) {
-  pumpMainState = on;
-  writePumpOutput(PIN_PUMP_MAIN, on);
+  const bool effectiveOn = actuatorEffectiveState(on);
+  pumpMainState = effectiveOn;
+  writePumpOutput(PIN_PUMP_MAIN, effectiveOn);
 }
 
 void setPumpA(bool on) {
+  on = actuatorEffectiveState(on);
   if (on && pumpBState) {
     setPumpB(false);
   }
@@ -41,6 +44,7 @@ void setPumpA(bool on) {
 }
 
 void setPumpB(bool on) {
+  on = actuatorEffectiveState(on);
   if (on && pumpAState) {
     setPumpA(false);
   }
@@ -50,8 +54,9 @@ void setPumpB(bool on) {
 }
 
 void setPumpSpare(bool on) {
-  pumpSpareState = on;
-  writePumpOutput(PIN_PUMP_SPARE, on);
+  const bool effectiveOn = actuatorEffectiveState(on);
+  pumpSpareState = effectiveOn;
+  writePumpOutput(PIN_PUMP_SPARE, effectiveOn);
 }
 
 void turnAllPumpsOff() {
@@ -59,6 +64,21 @@ void turnAllPumpsOff() {
   setPumpA(false);
   setPumpB(false);
   setPumpSpare(false);
+}
+
+void enforceActuatorSafetyLock() {
+  if (!ACTUATORS_LOCKED) {
+    return;
+  }
+
+  pumpMainState = false;
+  pumpAState = false;
+  pumpBState = false;
+  pumpSpareState = false;
+  writePumpOutput(PIN_PUMP_MAIN, false);
+  writePumpOutput(PIN_PUMP_A, false);
+  writePumpOutput(PIN_PUMP_B, false);
+  writePumpOutput(PIN_PUMP_SPARE, false);
 }
 
 bool getPumpMain() {

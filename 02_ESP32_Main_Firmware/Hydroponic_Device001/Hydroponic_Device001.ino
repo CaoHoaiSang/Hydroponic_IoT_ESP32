@@ -74,6 +74,7 @@ void handleCommand(String command);
 void readSerialCommands();
 void handleMqttMessage(const String& topic, const String& payload);
 void handlePumpCommandPayload(const String& payload);
+bool isSerialActuatorCommand(const String& command);
 
 void printPumpState(const char* pumpName, bool on) {
   Serial.print(pumpName);
@@ -85,6 +86,10 @@ void printHelp() {
   Serial.println("Available commands:");
   Serial.println("  help");
   Serial.println("  status");
+  if (ACTUATORS_LOCKED) {
+    Serial.println("  Actuator commands are disabled by the USB Stage 1 profile.");
+    return;
+  }
   Serial.println("  all_off");
   Serial.println("  main_on");
   Serial.println("  main_off");
@@ -174,6 +179,12 @@ void setPulseTargetOff(PulseTarget target) {
 }
 
 void setPulseTargetOn(PulseTarget target) {
+  if (ACTUATORS_LOCKED) {
+    enforceActuatorSafetyLock();
+    Serial.println("Rejected: USB Stage 1 actuator lock is active");
+    return;
+  }
+
   if (target == PULSE_MAIN) {
     setPumpMain(true);
     printPumpState("pumpMain", true);
@@ -278,6 +289,12 @@ String normalizePumpName(String pump) {
 }
 
 void startPulse(PulseTarget target, unsigned long durationMs, bool fromMqtt, const PumpCommand& command) {
+  if (ACTUATORS_LOCKED) {
+    enforceActuatorSafetyLock();
+    Serial.println("Rejected: USB Stage 1 actuator lock is active");
+    return;
+  }
+
   cancelActivePulse(!fromMqtt, "Pump command cancelled by Serial pulse command");
 
   setPulseTargetOn(target);
@@ -505,6 +522,12 @@ void handlePumpCommandPayload(const String& payload) {
 
   PumpCommand command = parsePumpCommandPayload(payload);
 
+  if (ACTUATORS_LOCKED || !MQTT_PUMP_COMMANDS_ENABLED) {
+    enforceActuatorSafetyLock();
+    rejectPumpCommand(command, "Rejected: USB Stage 1 actuator lock is active");
+    return;
+  }
+
   if (command.commandId.length() == 0) {
     command.commandId = "unknown";
   }
@@ -575,8 +598,28 @@ void handlePumpCommandPayload(const String& payload) {
 
 void handleMqttMessage(const String& topic, const String& payload) {
   if (topic == MQTT_TOPIC_PUMP_CMD) {
+    if (!MQTT_PUMP_COMMANDS_ENABLED) {
+      enforceActuatorSafetyLock();
+      Serial.println("Rejected: MQTT pump commands are disabled by build profile");
+      return;
+    }
     handlePumpCommandPayload(payload);
   }
+}
+
+bool isSerialActuatorCommand(const String& command) {
+  const char* actuatorCommands[] = {
+    "all_off", "main_on", "main_off", "a_on", "a_off", "b_on", "b_off",
+    "spare_on", "spare_off", "pulse_main", "pulse_a", "pulse_b"
+  };
+
+  for (const char* actuatorCommand : actuatorCommands) {
+    if (command == actuatorCommand) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void handleCommand(String command) {
@@ -584,6 +627,12 @@ void handleCommand(String command) {
   command.toLowerCase();
 
   if (command.length() == 0) {
+    return;
+  }
+
+  if (ACTUATORS_LOCKED && isSerialActuatorCommand(command)) {
+    enforceActuatorSafetyLock();
+    Serial.println("Rejected: USB Stage 1 actuator lock is active");
     return;
   }
 
@@ -695,16 +744,20 @@ void setup() {
   Serial.println(DEVICE_ID);
   Serial.print("Telemetry schema: ");
   Serial.println(TELEMETRY_SCHEMA_VERSION);
+  Serial.print("Build profile: ");
+  Serial.println(HYDROPONIC_BUILD_PROFILE_NAME);
   Serial.print("Boot ID: ");
   Serial.println(getTelemetryBootId());
   Serial.println("Mode: Wi-Fi + MQTT Sensor Publish + Pump Command V2");
   Serial.print("MQTT sensor topic: ");
   Serial.println(MQTT_TOPIC_SENSOR);
-  Serial.print("MQTT pump command topic: ");
-  Serial.println(MQTT_TOPIC_PUMP_CMD);
+  Serial.print("MQTT pump command subscription: ");
+  Serial.println(MQTT_PUMP_COMMANDS_ENABLED ? MQTT_TOPIC_PUMP_CMD : "DISABLED");
   Serial.print("MQTT pump status topic: ");
   Serial.println(MQTT_TOPIC_PUMP_STATUS);
-  Serial.println("Manual Serial commands are still enabled.");
+  Serial.println(ACTUATORS_LOCKED
+    ? "Actuator lock: ON - all pump outputs are forced OFF."
+    : "Manual Serial commands are enabled.");
   Serial.println("WARNING: Pump A/B MQTT/API commands are pulse-only.");
   Serial.println("WARNING: Main pump MQTT/API supports continuous set on/off.");
   Serial.println("WARNING: Use clean water only for Pump A/B tests.");
@@ -719,7 +772,13 @@ void loop() {
   unsigned long currentMs = millis();
 
   readSerialCommands();
-  updatePulse();
+  if (ACTUATORS_LOCKED) {
+    activePulse = PULSE_NONE;
+    clearMqttCommandState();
+    enforceActuatorSafetyLock();
+  } else {
+    updatePulse();
+  }
   mqttLoop();
   sensorsUpdate(currentMs);
   latestSensorData = readSensors();
