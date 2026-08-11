@@ -5,22 +5,19 @@ DS18B20 water temperature, water-level interlocks, MQTT, a local Edge Server, an
 
 ## Current Phase
 
-Phase 22A Fix 1 remediates the independent re-audit before staging. Phase 22A adds a
-Telemetry Identity V2 firmware contract, backend duplicate and
-order protection, three-distinct-measurement stability, and a side-effect-free Shadow
-Mode. Auto Dosing is locked OFF. Shadow Mode can record hypothetical eligibility and
-reason codes but cannot publish MQTT pump commands or create dosing runs.
+Phase 22B Stage 0 provides an isolated local staging stack for MongoDB, MQTT, the backend,
+Shadow Mode, APIs, and the Dashboard. It uses loopback-only ports and `stage0/` MQTT topics,
+contains no production credential, keeps Auto Dosing hard-locked OFF, and disables both
+manual pump service paths and the MQTT pump publisher through
+`PUMP_COMMANDS_DISABLED=true`.
 
-Fix 1 prevents delayed retries from becoming fresh merely because the server received
-them again, resumes failed/stuck telemetry rows safely, shares Phase 21 daily-dose
-accounting with Shadow, and executes firmware-core and Dashboard rendering tests.
+Phase 22A Fix 2 is the staging baseline. It preserves Telemetry Identity V2, duplicate and
+order protection, three-distinct-measurement stability, and side-effect-free Shadow Mode.
+Fix 2 also makes concurrent expired processing-lease recovery single-owner and idempotent.
 
-Firmware baseline and Phase 22A pre-Fix-1 builds passed with Arduino CLI 1.5.1, ESP32
-core 3.3.10, and the verified Arduino IDE FQBN. The full firmware has not been recompiled
-after Fix 1 in the current environment; the native C++ core harness passes. Isolated
-backend/API/Dashboard tests pass; no
-firmware upload, operational database/MQTT connection, calibration lifecycle mutation,
-or physical pump operation occurred.
+The full Phase 22A Fix 2 firmware compiled successfully with Arduino CLI 1.5.1, ESP32 core
+3.3.10, and the verified Arduino IDE FQBN: flash 943700 bytes (71%) and static RAM 47208
+bytes (14%). Firmware was not uploaded. Stage 0 does not require an ESP32 or hardware.
 
 Phase 21 hardens EC/TDS calibration and Auto Dosing safety. Calibration is EC-first,
 uses explicit `draft -> active -> retired` sets, and converts EC to TDS with scale 500
@@ -63,10 +60,27 @@ No pH dosing, Adaptive Dosing, Zalo Bot, AI Camera, or authentication is impleme
 ## Start Safely
 
 1. Read `00_Docs/Wiring_Checklist.md` and `00_Docs/EC_TDS_Calibration.md`.
-2. Recompile Fix 1 with the verified FQBN before any upload; keep pumps and nutrient bottles disconnected.
+2. Keep pumps and nutrient bottles disconnected; Stage 0 does not upload firmware.
 3. Configure examples without committing credentials.
 4. In `03_Edge_Server/mqtt_backend`, run `npm test` before `npm start`.
 5. Keep Auto Dosing OFF. Phase 22A rejects attempts to enable it.
+
+## Phase 22B Stage 0
+
+Stage 0 uses MongoDB `127.0.0.1:27018`, MQTT `127.0.0.1:18884`, database
+`hydroponic_stage0`, and backend/Dashboard `127.0.0.1:3100`. Existing services on default
+ports `27017` and `1883` are not used.
+
+```powershell
+cd 03_Edge_Server\mqtt_backend
+powershell -ExecutionPolicy Bypass -File .\staging\Start-Staging.ps1
+npm run stage0:test
+powershell -ExecutionPolicy Bypass -File .\staging\Stop-Staging.ps1
+powershell -ExecutionPolicy Bypass -File .\staging\Reset-Staging.ps1
+```
+
+See `03_Edge_Server/mqtt_backend/staging/README.md` for the isolation contract, topics,
+repeatable lifecycle commands, and executable Stage 0 coverage.
 
 See `00_Docs/Telemetry_Identity_Shadow_Mode.md` for the V2 payload, boot transition,
 duplicate/order policy, Shadow gates, indexes, and read-only APIs.

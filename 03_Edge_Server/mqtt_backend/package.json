@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "stage0:test": "node staging/runStage0Checks.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

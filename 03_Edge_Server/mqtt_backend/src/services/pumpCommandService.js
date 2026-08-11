@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 
 const { getDb } = require('../mongoClient');
-const { publishPumpCommand } = require('../mqttClient');
+const { publishPumpCommand, pumpCommandsDisabled } = require('../mqttClient');
 const {
   validateMainPumpStateCommand,
   validatePumpCommand,
@@ -70,6 +70,14 @@ async function validateMainPumpStateAgainstLatest(command) {
 }
 
 async function sendPumpCommand(deviceId, body) {
+  if (pumpCommandsDisabled()) {
+    return {
+      ok: false,
+      error: 'pump_commands_disabled',
+      errors: ['Pump commands are disabled in this environment'],
+    };
+  }
+
   const validation = validatePumpCommand(deviceId, body || {});
 
   if (!validation.ok) {
@@ -111,6 +119,14 @@ async function sendPumpCommand(deviceId, body) {
 }
 
 async function sendMainPumpStateCommand(deviceId, body) {
+  if (pumpCommandsDisabled()) {
+    return {
+      ok: false,
+      error: 'pump_commands_disabled',
+      errors: ['Pump commands are disabled in this environment'],
+    };
+  }
+
   const validation = validateMainPumpStateCommand(deviceId, body || {});
 
   if (!validation.ok) {

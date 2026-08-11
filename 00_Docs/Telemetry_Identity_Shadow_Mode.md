@@ -1,4 +1,4 @@
-# Telemetry Identity V2 And Shadow Mode - Phase 22A Fix 1
+# Telemetry Identity V2 And Shadow Mode - Phase 22A Fix 2 / Phase 22B Stage 0
 
 ## Firmware Identity
 
@@ -82,6 +82,11 @@ discarded as a duplicate. Rows created before Fix 1 with order status `PROCESSIN
 claimed; when the device telemetry session proves the exact same boot/sequence was already
 accepted, order classification is reused instead of incorrectly reclassifying it as old.
 
+Fix 2 makes an expired-lease claim single-owner by requiring the expected `PROCESSING`
+state, an expired `processingLeaseUntil`, and the observed `processingAttempt` in the same
+atomic update. A concurrent loser follows the idempotent duplicate path and cannot create a
+second sensor log, Shadow decision, or dosing run.
+
 ## Shadow Mode
 
 `SHADOW_MODE_ENABLED` is independent from Auto Dosing and defaults to `false`.
@@ -150,9 +155,15 @@ a unique `{deviceId, measurementId}` index.
 
 ## Runtime Status
 
-Implementation, isolated fake-database tests, API tests, native C++ firmware-core harness,
-and executable Dashboard render tests pass. The complete firmware compiled before Fix 1;
-it has not been recompiled in the current environment after adding the host-testable
-sequence/retry headers because Arduino CLI/PlatformIO is unavailable here.
-Operational MongoDB, MQTT, ESP32 upload, dashboard browser runtime, and physical hardware
-remain untested for Phase 22A. No production service or pump was used during implementation.
+Phase 22A Fix 2 passes the full backend suite, native C++ firmware-core harness, executable
+Dashboard render tests, and full Arduino firmware compile. The verified compile uses Arduino
+CLI 1.5.1 and ESP32 core 3.3.10; flash is 943700 bytes (71%) and static RAM is 47208 bytes
+(14%). Firmware was not uploaded.
+
+Phase 22B Stage 0 has run successfully against isolated real MongoDB and Mosquitto instances
+on `127.0.0.1:27018` and `127.0.0.1:18884`, with backend/Dashboard on
+`127.0.0.1:3100`. The executable staging test verifies identity, boot transition,
+duplicate/retry idempotency, out-of-order and delayed data, three distinct stable
+measurements, Shadow history, API/Dashboard responses, Auto Dosing OFF, zero pump command,
+and zero dosing run. Production services, credentials, firmware upload, and physical
+hardware are not used.

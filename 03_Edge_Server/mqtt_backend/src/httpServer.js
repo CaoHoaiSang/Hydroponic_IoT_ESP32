@@ -17,6 +17,7 @@ function buildCorsOptions() {
 function startHttpServer() {
   const app = express();
   const port = Number.parseInt(process.env.HTTP_PORT || '3001', 10);
+  const host = process.env.HTTP_HOST || null;
   const publicDir = path.join(__dirname, '..', 'public');
 
   app.use(cors(buildCorsOptions()));
@@ -27,10 +28,12 @@ function startHttpServer() {
   });
   app.use(express.static(publicDir));
 
-  server = app.listen(port, () => {
-    console.log(`REST API listening on http://localhost:${port}`);
-    console.log(`Dashboard available at http://localhost:${port}/`);
-  });
+  const onListening = () => {
+    const displayHost = host || 'localhost';
+    console.log(`REST API listening on http://${displayHost}:${port}`);
+    console.log(`Dashboard available at http://${displayHost}:${port}/`);
+  };
+  server = host ? app.listen(port, host, onListening) : app.listen(port, onListening);
 
   return server;
 }

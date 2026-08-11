@@ -5,6 +5,10 @@ const { processTelemetryPayload } = require('./services/telemetryPipelineService
 
 let mqttClient = null;
 
+function pumpCommandsDisabled() {
+  return String(process.env.PUMP_COMMANDS_DISABLED || '').trim().toLowerCase() === 'true';
+}
+
 function buildMqttOptions() {
   const username = process.env.MQTT_USERNAME || '';
   const password = process.env.MQTT_PASSWORD || '';
@@ -95,6 +99,12 @@ function connectMqtt() {
 }
 
 function publishPumpCommand(command) {
+  if (pumpCommandsDisabled()) {
+    const error = new Error('Pump command publishing is disabled by environment');
+    error.code = 'PUMP_COMMANDS_DISABLED';
+    return Promise.reject(error);
+  }
+
   if (!mqttClient || !mqttClient.connected) {
     return Promise.reject(new Error('MQTT client is not connected'));
   }
@@ -137,5 +147,6 @@ module.exports = {
   connectMqtt,
   closeMqtt,
   isMqttConnected,
+  pumpCommandsDisabled,
   publishPumpCommand,
 };

@@ -7,8 +7,8 @@
 
 ## 2. Current Project Phase
 
-- Current phase: Phase 22A Fix 2 - Independent Re-audit and Full Firmware Compile
-- Short description: Independent re-audit found and fixed a concurrent expired-lease retry claim race. All 173 backend tests, 43 JavaScript syntax checks, native firmware host tests, Dashboard DOM/runtime tests, and the full ESP32 Arduino compile pass. Auto Dosing remains locked OFF; operational MongoDB/MQTT, firmware upload, and physical hardware were not used.
+- Current phase: Phase 22B Stage 0 - Isolated Staging Preparation
+- Short description: A repeatable loopback-only MongoDB, MQTT, backend, Shadow Mode, API, and Dashboard staging stack is implemented and runtime-tested. Auto Dosing remains locked OFF, pump command services and publisher are disabled in staging, and no production endpoint, credential, firmware upload, or hardware was used.
 
 ## 3. Completed Tasks
 
@@ -42,6 +42,7 @@
 | 26 | Phase 22A duplicate/order/boot protection | Implemented | V2 validation, partial unique identity index, idempotent duplicate path, conservative boot transition, accepted-only latest, and distinct stability implemented. |
 | 27 | Phase 22A Shadow Mode | Implemented | Pure 30-gate engine, one decision per accepted measurement, read-only APIs, dashboard status/history, and zero-side-effect tests implemented. Runtime test on operational services is waiting. |
 | 28 | Phase 22A Fix 2 independent re-audit | Done | Expired `PROCESSING` lease claim is now atomic by state, lease, and attempt. Full suite: 173 passed, 0 failed, 0 skipped. Full Arduino compile passed; no upload. |
+| 29 | Phase 22B Stage 0 isolated staging | Done | Real isolated MongoDB/MQTT/backend/Dashboard runtime PASS on ports 27018/18884/3100. Stop/reset/start repeatability PASS; Auto Dosing OFF, zero pump command, zero dosing run. |
 
 ## 4. Created Folders
 
@@ -107,6 +108,20 @@ Phase 22A Fix 2 creates at final handoff:
 
 - `CODEX_PHASE22A_FIX2_FINAL_REPORT.md`
 - `Hydroponic_IoT_ESP32_PHASE22A_FIX2_REVIEW.zip`
+
+Phase 22B Stage 0 created:
+
+- `03_Edge_Server/mqtt_backend/staging/.env.staging.example`
+- `03_Edge_Server/mqtt_backend/staging/mosquitto.stage0.conf`
+- `03_Edge_Server/mqtt_backend/staging/Stage0.Common.ps1`
+- `03_Edge_Server/mqtt_backend/staging/Start-Staging.ps1`
+- `03_Edge_Server/mqtt_backend/staging/Stop-Staging.ps1`
+- `03_Edge_Server/mqtt_backend/staging/Reset-Staging.ps1`
+- `03_Edge_Server/mqtt_backend/staging/Get-StagingStatus.ps1`
+- `03_Edge_Server/mqtt_backend/staging/runStage0Checks.js`
+- `03_Edge_Server/mqtt_backend/staging/README.md`
+- `03_Edge_Server/mqtt_backend/test/stage0Safety.test.js`
+- `CODEX_PHASE22B_STAGE0_REPORT.md`
 
 ## 6. Modified Files
 
@@ -199,6 +214,17 @@ Phase 22A Fix 2 modified:
 - `00_Docs/PROJECT_STATUS_REPORT.md`: records the independent audit, defect, verification, and handoff state.
 - `03_Edge_Server/mqtt_backend/src/services/sensorLogService.js`: makes expired processing-lease claims atomic with lease/attempt compare-and-set filters.
 - `03_Edge_Server/mqtt_backend/test/phase22aFix1.test.js`: adds concurrent expired-lease retry regression coverage.
+
+Phase 22B Stage 0 modified:
+
+- `.gitignore`: excludes generated Stage 0 runtime data and logs.
+- `README.md`: records Phase 22A Fix 2 compile evidence and Stage 0 commands.
+- `00_Docs/Telemetry_Identity_Shadow_Mode.md`: replaces stale Fix 1 runtime status and documents Fix 2 recovery plus Stage 0 evidence.
+- `00_Docs/PROJECT_STATUS_REPORT.md`: records Stage 0 files, runtime results, safety state, and next task.
+- `03_Edge_Server/mqtt_backend/package.json`: adds `stage0:test`.
+- `03_Edge_Server/mqtt_backend/src/httpServer.js`: supports an optional bind host so Stage 0 is loopback-only.
+- `03_Edge_Server/mqtt_backend/src/mqttClient.js`: adds environment pump-publisher lock.
+- `03_Edge_Server/mqtt_backend/src/services/pumpCommandService.js`: rejects manual pump service paths when staging lock is enabled.
 
 ## 7. Hardware Pin Map Confirmed
 
@@ -379,13 +405,14 @@ Example verified safety event:
 - No SQLite/PostgreSQL migration.
 - Cloud/Fleet Management remains architectural only.
 - No Device Enrollment, AI Model OTA, Zalo OA, or AI Camera.
+- Stage 0 is loopback-only and intentionally anonymous; it is not a production security configuration.
+- `npm audit` still reports indirect `body-parser` (low) and `ip-address` (high) findings; no dependency was automatically upgraded in Stage 0.
 
 ## 12. Next Recommended Direction
 
-"Proceed to Phase 22B staging preparation only in an isolated environment. Keep Auto Dosing OFF,
-use a non-production MongoDB database and MQTT broker, keep nutrient bottles disconnected, and
-verify telemetry identity, boot transition, retry idempotency, stability, Shadow history, and
-dashboard rendering before any supervised hardware test."
+"Proceed to USB Stage 1 using the verified isolated Stage 0 stack. Keep Auto Dosing OFF,
+nutrient bottles disconnected, and pump power removed. Connect only a staging ESP32 and
+verify real USB/telemetry identity behavior before any supervised hardware-control work."
 
 Do not connect nutrient bottles or enable Auto Dosing during this validation.
 
@@ -449,10 +476,8 @@ message was published, and no production database was read or modified.
 
 ### Next Recommended Task
 
-Independently review the Phase 22A source archive. For Phase 22B, use an isolated staging
-MongoDB and MQTT broker, keep nutrient bottles disconnected and Auto Dosing OFF, upload
-the compiled firmware, then verify boot transition, duplicate retry, order status,
-three-distinct-measurement stability, Shadow decision history, and dashboard rendering.
+Historical recommendation completed by Phase 22B Stage 0. See Section 17 for current
+runtime evidence and the USB Stage 1 recommendation.
 
 ## 15. Phase 22A Fix 1 - Independent Re-audit Remediation
 
@@ -513,4 +538,42 @@ Phase 22A Fix 2 closes that race and adds permanent regression coverage.
 
 ### Next Recommended Task
 
-Prepare Phase 22B in isolated staging with Auto Dosing OFF and nutrient bottles disconnected.
+Proceed to USB Stage 1 with Auto Dosing OFF, nutrient bottles disconnected, and no pump
+power. Connect only a staging ESP32 after reviewing the Stage 0 report, then verify real
+telemetry identity and Shadow observation against the isolated ports/topics.
+
+## 17. Phase 22B Stage 0 - Isolated Staging Runtime
+
+### Isolation
+
+- MongoDB: `mongodb://127.0.0.1:27018`, database `hydroponic_stage0`.
+- MQTT: `mqtt://127.0.0.1:18884`.
+- Backend and Dashboard: `http://127.0.0.1:3100`.
+- MQTT topics use the `stage0/hydroponic/device001/` prefix.
+- Existing default services on MongoDB 27017 and MQTT 1883 were not used.
+- The sample configuration contains no credential. Runtime data stays under the ignored
+  `staging/.stage0_runtime/` directory.
+
+### Runtime Result
+
+- Start/health: PASS for isolated MongoDB, MQTT, backend, Shadow Mode, API, and Dashboard.
+- Stage 0 end-to-end check: PASS on two runs separated by stop/reset/start.
+- Telemetry Identity V2, boot transition, duplicate/retry idempotency, out-of-order,
+  delayed freshness, and three distinct measurements: PASS.
+- Sensor logs: 9. Shadow decisions: 7. Stable distinct measurements: 3.
+- Delayed measurement: rejected for control with `tds_measurement_stale`.
+- API and Dashboard: PASS, Dashboard HTTP 200.
+- Auto Dosing enabled: false.
+- Pump command messages observed: 0.
+- Pump logs: 0. Dosing runs: 0.
+- Manual pulse/main API attempts: rejected by `pump_commands_disabled`.
+
+### Firmware And Hardware
+
+Firmware was not modified in Stage 0, so it was not recompiled. The Phase 22A Fix 2 full
+compile remains the current evidence. No firmware upload, ESP32 connection, or physical
+hardware operation occurred.
+
+### Stage 0 Conclusion
+
+`READY_FOR_USB_STAGE1`
