@@ -7,6 +7,11 @@ let latestDeviceStatus = null;
 let isAutoDosingFormDirty = false;
 let isAutoDosingFormFocused = false;
 let hasAutoDosingSettingsLoadedOnce = false;
+let lastSavedAutoDosingEnabled = false;
+let latestAutoDosingRuns = [];
+let latestAutoDosingEvents = [];
+let selectedTdsCalibrationSetId = '';
+let latestAutoDosingReadiness = null;
 
 function byId(id) {
   return document.getElementById(id);
@@ -165,13 +170,28 @@ function renderLatest(data) {
   byId('currentTdsRawVoltage').textContent = formatNumberWithUnit(latest.tdsVoltage, 3, 'V');
   byId('currentTdsVoltage25').textContent = formatNumberWithUnit(latest.tdsVoltage25, 3, 'V');
   byId('currentTdsTempComp').textContent = formatYesNo(latest.tdsTemperatureCompensated);
-  byId('currentTdsTempCoeff').textContent = formatNumber(latest.tdsTemperatureCoefficientUsed, 3);
+  byId('currentTdsTempCoeff').textContent = formatNumber(latest.tdsTemperatureAlphaPerC, 3);
   byId('currentTdsTempReference').textContent = formatNumberWithUnit(latest.tdsTemperatureReferenceC, 1, 'C');
   byId('currentTdsPpmValue').textContent = formatNumberWithUnit(latest.tdsPpm, 2, 'ppm');
   byId('currentTdsMode').textContent = formatValue(latest.tdsCalibrationMode);
   byId('currentTdsPointCount').textContent = formatNumber(latest.tdsCalibrationPointCount, 0);
   byId('currentTdsInRange').textContent = formatYesNo(latest.tdsCalibrationInRange);
   byId('currentTdsWarning').textContent = formatCalibrationWarning(latest.tdsCalibrationWarning);
+  byId('qualityTdsRawVoltage').textContent = formatNumberWithUnit(latest.tdsVoltage, 3, 'V');
+  byId('qualityTdsVoltage25').textContent = formatNumberWithUnit(latest.tdsVoltage25, 3, 'V');
+  byId('qualityEcValue').textContent = formatNumberWithUnit(latest.ecUsCm, 2, 'uS/cm');
+  byId('qualityTdsPpm').textContent = formatNumberWithUnit(latest.tdsPpm, 2, 'ppm');
+  byId('qualityTempAlpha').textContent = formatNumberWithUnit(latest.tdsTemperatureAlphaPerC, 3, '/C');
+  byId('qualityTempFactor').textContent = formatNumber(latest.tdsTemperatureFactorUsed, 4);
+  byId('qualityWindowStable').textContent = formatYesNo(latest.tdsWindowStable);
+  byId('qualityBackendStable').textContent = formatYesNo(latest.tdsStable);
+  byId('qualityStabilitySpread').textContent = `${formatNumber(latest.tdsStabilitySpreadPpm, 2)} / ${formatNumber(latest.tdsStabilityThresholdPpm, 2)} ppm`;
+  byId('qualityControlValid').textContent = formatYesNo(latest.tdsControlValid);
+  byId('qualityCalibrationWarning').textContent = formatCalibrationWarning(latest.tdsCalibrationWarning);
+  byId('qualityControlReasons').textContent = Array.isArray(latest.tdsControlInvalidReasons)
+    && latest.tdsControlInvalidReasons.length > 0
+    ? latest.tdsControlInvalidReasons.join(', ')
+    : 'None';
   byId('waterTempValue').textContent = formatNumberWithUnit(latest.waterTemp, 2, 'C');
   byId('phValue').textContent = formatValue(latest.ph);
   byId('lastSeenMeta').textContent = `Last seen: ${formatDate(data.lastSeenAt)}`;
@@ -196,6 +216,114 @@ function renderLatest(data) {
   setPumpBadge('pumpBBadge', latest.pumpB);
   setPumpBadge('pumpSpareBadge', latest.pumpSpare);
   byId('mainPumpContinuousValue').textContent = formatBoolOnOff(latest.pumpMain);
+}
+
+function renderTelemetryIdentity(latestData, logsData) {
+  const latest = latestData && latestData.latest ? latestData.latest : {};
+  const logs = logsData && Array.isArray(logsData.data) ? logsData.data : [];
+  const received = logs[0] || latest;
+  const isLegacy = received.schemaVersion !== 2;
+  const orderStatus = isLegacy
+    ? (received.telemetryOrderStatus || 'LEGACY_NO_IDENTITY')
+    : (received.telemetryOrderStatus || 'INVALID');
+
+  byId('telemetrySchemaValue').textContent = isLegacy ? 'Legacy' : formatNumber(received.schemaVersion, 0);
+  byId('telemetryMeasurementIdValue').textContent = formatValue(received.measurementId);
+  byId('telemetryBootIdValue').textContent = formatValue(received.bootId);
+  byId('telemetrySeqValue').textContent = formatNumber(received.measurementSeq, 0);
+  byId('telemetrySampledUptimeValue').textContent = formatUptime(received.sampledAtUptimeMs);
+  byId('telemetryOrderValue').textContent = orderStatus;
+  byId('telemetryIdentityValue').textContent = formatYesNo(received.telemetryIdentityValid);
+  byId('telemetryDuplicateValue').textContent = formatYesNo(received.telemetryDuplicate);
+  byId('telemetryControlValue').textContent = formatYesNo(latest.controlEligible);
+  byId('telemetryRawValue').textContent = `${formatNumber(latest.tdsRaw, 0)} / ${formatNumberWithUnit(latest.tdsVoltage, 3, 'V')}`;
+  byId('telemetryEcValue').textContent = formatNumberWithUnit(latest.ecUsCm, 2, 'uS/cm');
+  byId('telemetryPpmValue').textContent = formatNumberWithUnit(latest.tdsPpm, 2, 'ppm');
+  byId('telemetrySetValue').textContent = formatValue(latest.tdsCalibrationSetId);
+  byId('telemetrySampleCountValue').textContent = formatNumber(latest.tdsSampleCount, 0);
+  byId('telemetryDistinctCountValue').textContent = formatNumber(latest.tdsStabilityDistinctMeasurementCount, 0);
+  byId('telemetryStableValue').textContent = formatYesNo(latest.tdsStable);
+  byId('telemetryLegacyStatus').textContent = isLegacy
+    ? 'Latest received telemetry is legacy and remains excluded from stability, Shadow eligibility, and control.'
+    : `Latest received classification: ${orderStatus}. devices.latest changes only for ACCEPTED V2 measurements.`;
+}
+
+function renderShadowGates(gates) {
+  const body = byId('shadowGatesBody');
+  body.textContent = '';
+  const rows = Array.isArray(gates) ? gates : [];
+  if (rows.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 4;
+    cell.textContent = 'No Shadow decision yet';
+    row.appendChild(cell);
+    body.appendChild(row);
+    return;
+  }
+  for (const item of rows) {
+    const row = document.createElement('tr');
+    appendCell(row, formatValue(item.code));
+    appendCell(row, formatValue(item.status));
+    appendCell(row, formatValue(item.reasonCode));
+    appendCell(row, formatValue(item.detail));
+    body.appendChild(row);
+  }
+}
+
+function formatHypotheticalDose(decision) {
+  if (!decision || decision.hypotheticalDoseMlPerPump === null
+    || decision.hypotheticalDoseMlPerPump === undefined) return 'N/A';
+  return `${formatNumber(decision.hypotheticalDoseMlPerPump, 2)} ml each / A ${formatNumber(decision.hypotheticalPumpADurationMs, 0)} ms / B ${formatNumber(decision.hypotheticalPumpBDurationMs, 0)} ms`;
+}
+
+function renderShadowData(statusData, decisionsData) {
+  const status = statusData.data || {};
+  const decisions = Array.isArray(decisionsData.data) ? decisionsData.data : [];
+  const latest = status.latestDecision || decisions[0] || null;
+  byId('phase22AutoDosingValue').textContent = status.autoDosing || 'OFF';
+  byId('shadowModeValue').textContent = status.enabled === true ? 'ON' : 'OFF';
+  byId('shadowSectionStatus').textContent = status.enabled === true
+    ? 'Shadow Mode ON - observation only'
+    : 'Shadow Mode OFF - set SHADOW_MODE_ENABLED=true to observe';
+  byId('shadowDecisionValue').textContent = latest ? formatValue(latest.decision) : 'N/A';
+  byId('shadowPrimaryReasonValue').textContent = latest ? formatValue(latest.primaryReasonCode) : 'N/A';
+  byId('shadowReasonsValue').textContent = latest && Array.isArray(latest.reasonCodes) && latest.reasonCodes.length
+    ? latest.reasonCodes.join(', ') : 'None';
+  byId('shadowActionValue').textContent = latest ? formatValue(latest.hypotheticalAction) : 'N/A';
+  byId('shadowDoseValue').textContent = formatHypotheticalDose(latest);
+  byId('shadowDecisionTimeValue').textContent = latest ? formatDate(latest.createdAt) : 'N/A';
+  renderShadowGates(latest && latest.gates);
+
+  const body = byId('shadowDecisionsBody');
+  body.textContent = '';
+  if (decisions.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 6;
+    cell.textContent = 'No Shadow decisions recorded';
+    row.appendChild(cell);
+    body.appendChild(row);
+    return;
+  }
+  for (const decision of decisions) {
+    const row = document.createElement('tr');
+    appendCell(row, formatDate(decision.createdAt));
+    appendCell(row, formatValue(decision.measurementId));
+    appendCell(row, formatValue(decision.decision));
+    appendCell(row, formatValue(decision.primaryReasonCode));
+    appendCell(row, formatValue(decision.hypotheticalAction));
+    appendCell(row, formatHypotheticalDose(decision));
+    body.appendChild(row);
+  }
+}
+
+async function loadShadowData() {
+  const [status, decisions] = await Promise.all([
+    fetchJson(`/api/devices/${DEVICE_ID}/shadow-mode/status`),
+    fetchJson(`/api/devices/${DEVICE_ID}/shadow-mode/decisions?limit=20`),
+  ]);
+  renderShadowData(status, decisions);
 }
 
 function appendAlertCell(card, label, value) {
@@ -669,8 +797,10 @@ function bindCalibrationControls() {
 }
 
 function setTdsCalibrationFormDisabled(disabled) {
-  byId('useLatestTdsButton').disabled = disabled;
-  byId('saveTdsCalibrationButton').disabled = disabled;
+  ['createTdsSetButton', 'validateTdsSetButton', 'activateTdsSetButton', 'retireTdsSetButton',
+    'ecUseLatestTdsButton', 'addTdsPointButton'].forEach((id) => {
+    byId(id).disabled = disabled;
+  });
 }
 
 function setNumberInputFromLatest(inputId, value, digits) {
@@ -685,14 +815,26 @@ function setNumberInputFromLatest(inputId, value, digits) {
 }
 
 async function loadTdsCalibrationData() {
-  const [latestCalibration, calibrationHistory] = await Promise.all([
-    fetchJson(`/api/devices/${DEVICE_ID}/tds-calibrations/latest`),
+  const [setsResponse, activeResponse, legacyResponse] = await Promise.all([
+    fetchJson(`/api/devices/${DEVICE_ID}/tds-calibration-sets?limit=100`),
+    fetchJson(`/api/devices/${DEVICE_ID}/tds-calibration-sets/active`),
     fetchJson(`/api/devices/${DEVICE_ID}/tds-calibrations?limit=10`),
   ]);
-
-  renderLatestTdsCalibration(latestCalibration);
-  renderTdsCalibrationHistory(calibrationHistory);
-  byId('tdsCalibrationStatus').textContent = 'Latest TDS calibration loaded';
+  const sets = Array.isArray(setsResponse.data) ? setsResponse.data : [];
+  if (selectedTdsCalibrationSetId && !sets.some((set) => set.setId === selectedTdsCalibrationSetId)) {
+    selectedTdsCalibrationSetId = '';
+  }
+  renderTdsSetOptions(sets);
+  renderTdsCalibrationSets(sets);
+  renderActiveTdsSet(activeResponse.data || null);
+  renderLegacyTdsHistory(legacyResponse.data || []);
+  if (selectedTdsCalibrationSetId) {
+    const selected = await fetchJson(`/api/devices/${DEVICE_ID}/tds-calibration-sets/${encodeURIComponent(selectedTdsCalibrationSetId)}`);
+    renderSelectedTdsSet(selected.data);
+  } else {
+    renderSelectedTdsSet(null);
+  }
+  byId('ecTdsCalibrationStatus').textContent = `${sets.length} calibration sets loaded`;
 }
 
 function fillTdsCalibrationFromLatest() {
@@ -701,81 +843,138 @@ function fillTdsCalibrationFromLatest() {
     return;
   }
 
-  setNumberInputFromLatest('tdsMeasuredRawInput', latestDeviceStatus.tdsRaw, 0);
-  setNumberInputFromLatest('tdsMeasuredVoltageInput', latestDeviceStatus.tdsVoltage, 3);
-  setNumberInputFromLatest('tdsWaterTempInput', latestDeviceStatus.waterTemp, 2);
+  setNumberInputFromLatest('ecTdsMeasuredRawInput', latestDeviceStatus.tdsRaw, 0);
+  setNumberInputFromLatest('ecTdsMeasuredVoltageInput', latestDeviceStatus.tdsVoltage, 3);
+  setNumberInputFromLatest('ecTdsWaterTempInput', latestDeviceStatus.waterTemp, 2);
   setMessage('Latest TDS raw, voltage, and water temperature copied into calibration form.', 'ok');
 }
 
-async function saveTdsCalibration() {
-  const measuredRaw = Number(byId('tdsMeasuredRawInput').value);
-  const measuredVoltage = Number(byId('tdsMeasuredVoltageInput').value);
-  const referenceTdsPpm = Number(byId('tdsReferencePpmInput').value);
-  const waterTempInput = byId('tdsWaterTempInput').value;
-  const note = byId('tdsNoteInput').value;
-  const waterTemp = waterTempInput === '' ? null : Number(waterTempInput);
-
-  if (!Number.isFinite(measuredRaw) || measuredRaw <= 0) {
-    setMessage('TDS calibration error: measured raw must be greater than 0.', 'error');
-    return;
+async function requestTdsCalibration(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(options.headers || {}) },
+  });
+  const data = await response.json();
+  if (!response.ok || data.ok === false) {
+    throw new Error(Array.isArray(data.errors) ? data.errors.join('; ') : (data.message || data.error || 'request failed'));
   }
+  return data;
+}
 
-  if (!Number.isFinite(measuredVoltage) || measuredVoltage <= 0 || measuredVoltage > 3.3) {
-    setMessage('TDS calibration error: measured voltage must be between 0 and 3.3 V.', 'error');
-    return;
+function renderTdsSetOptions(sets) {
+  const select = byId('tdsSetSelect');
+  select.textContent = '';
+  const empty = document.createElement('option');
+  empty.value = '';
+  empty.textContent = 'Select a set explicitly';
+  select.appendChild(empty);
+  sets.forEach((set) => {
+    const option = document.createElement('option');
+    option.value = set.setId;
+    option.textContent = `${set.setId} (${set.status}, ${set.pointCount || 0} points)`;
+    select.appendChild(option);
+  });
+  select.value = selectedTdsCalibrationSetId;
+}
+
+function renderTdsCalibrationSets(sets) {
+  const body = byId('tdsCalibrationSetsBody');
+  body.textContent = '';
+  if (sets.length === 0) {
+    const row = document.createElement('tr'); appendCell(row, 'No calibration sets'); row.firstChild.colSpan = 7; body.appendChild(row); return;
   }
+  sets.forEach((set) => {
+    const row = document.createElement('tr');
+    appendCell(row, set.setId); appendCell(row, set.status); appendCell(row, formatNumber(set.pointCount, 0));
+    appendCell(row, set.validationStatus); appendCell(row, `${formatNumber(set.minVoltage25, 3)} - ${formatNumber(set.maxVoltage25, 3)} V`);
+    appendCell(row, `${formatNumber(set.minReferenceEcUsCm, 1)} - ${formatNumber(set.maxReferenceEcUsCm, 1)}`);
+    appendCell(row, formatDate(set.createdAt)); body.appendChild(row);
+  });
+}
 
-  if (!Number.isFinite(referenceTdsPpm) || referenceTdsPpm <= 0) {
-    setMessage('TDS calibration error: reference ppm must be greater than 0.', 'error');
-    return;
-  }
+function renderActiveTdsSet(set) {
+  byId('activeTdsSetSummary').textContent = set
+    ? `${set.setId} | ${set.pointCount} points | EC ${formatNumber(set.minReferenceEcUsCm, 1)}-${formatNumber(set.maxReferenceEcUsCm, 1)} uS/cm | TDS ${formatNumber(set.minReferenceTdsPpm, 1)}-${formatNumber(set.maxReferenceTdsPpm, 1)} ppm`
+    : 'No active calibration set';
+}
 
-  if (waterTemp !== null && !Number.isFinite(waterTemp)) {
-    setMessage('TDS calibration error: water temperature must be a number or blank.', 'error');
-    return;
-  }
-
-  setTdsCalibrationFormDisabled(true);
-  setMessage('Saving TDS calibration...');
-
-  try {
-    const response = await fetch(`/api/devices/${DEVICE_ID}/tds-calibration`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        measuredRaw,
-        measuredVoltage,
-        referenceTdsPpm,
-        waterTemp,
-        method: 'multi_point_piecewise_linear',
-        note,
-      }),
+function renderSelectedTdsSet(set) {
+  const body = byId('tdsSetPointsBody'); body.textContent = '';
+  byId('selectedTdsSetSummary').textContent = set
+    ? `${set.setId} | ${set.status} | ${set.validationStatus} | ${(set.validationErrors || []).join(', ') || 'no validation errors'}`
+    : 'No set selected';
+  if (!set || !Array.isArray(set.points) || set.points.length === 0) {
+    const row = document.createElement('tr'); appendCell(row, set ? 'No points in this set' : 'Select a calibration set'); row.firstChild.colSpan = 8; body.appendChild(row);
+  } else {
+    set.points.forEach((point) => {
+      const row = document.createElement('tr');
+      appendCell(row, formatDate(point.createdAt)); appendCell(row, formatNumber(point.measuredRaw, 0));
+      appendCell(row, formatNumber(point.measuredVoltage, 3)); appendCell(row, formatNumber(point.measuredVoltage25, 3));
+      appendCell(row, formatNumber(point.referenceEcUsCm, 1)); appendCell(row, formatNumber(point.referenceTdsPpm, 1));
+      appendCell(row, formatNumber(point.waterTemp, 2)); appendCell(row, formatValue(point.note)); body.appendChild(row);
     });
-    const data = await response.json();
-
-    if (!response.ok || data.ok === false) {
-      const errorText = Array.isArray(data.errors) ? data.errors.join('; ') : (data.message || data.error || 'request failed');
-      throw new Error(errorText);
-    }
-
-    await loadTdsCalibrationData();
-    setMessage(`TDS calibration saved: ${formatNumberWithUnit(data.data.calibrationFactor, 3, 'ppm/V')}`, 'ok');
-  } catch (error) {
-    setMessage(`TDS calibration error: ${error.message}`, 'error');
-  } finally {
-    setTdsCalibrationFormDisabled(false);
   }
+  byId('addTdsPointButton').disabled = !set || set.status !== 'draft';
+  byId('validateTdsSetButton').disabled = !set || set.status !== 'draft';
+  byId('activateTdsSetButton').disabled = !set || set.status !== 'draft';
+  byId('retireTdsSetButton').disabled = !set || set.status === 'retired';
+}
+
+function renderLegacyTdsHistory(rows) {
+  const body = byId('legacyTdsCalibrationBody'); body.textContent = '';
+  const legacyRows = rows.filter((row) => !row.calibrationSetId);
+  if (legacyRows.length === 0) {
+    const row = document.createElement('tr'); appendCell(row, 'No legacy calibration rows'); row.firstChild.colSpan = 6; body.appendChild(row); return;
+  }
+  legacyRows.forEach((item) => {
+    const row = document.createElement('tr'); appendCell(row, formatDate(item.createdAt)); appendCell(row, formatNumber(item.measuredRaw, 0));
+    appendCell(row, formatNumber(item.measuredVoltage, 3)); appendCell(row, formatNumber(item.referenceTdsPpm, 1));
+    appendCell(row, formatNumber(item.waterTemp, 2)); appendCell(row, formatValue(item.note)); body.appendChild(row);
+  });
+}
+
+async function createTdsCalibrationSet() {
+  const data = await requestTdsCalibration(`/api/devices/${DEVICE_ID}/tds-calibration-sets`, {
+    method: 'POST', body: JSON.stringify({ referenceMeter: byId('tdsReferenceMeterInput').value, note: byId('tdsSetNoteInput').value }),
+  });
+  selectedTdsCalibrationSetId = data.data.setId;
+  await loadTdsCalibrationData();
+  setMessage(`Draft calibration set created: ${selectedTdsCalibrationSetId}`, 'ok');
+}
+
+async function addTdsCalibrationPoint() {
+  if (!selectedTdsCalibrationSetId) throw new Error('Select a draft calibration set first');
+  const body = {
+    measuredRaw: Number(byId('ecTdsMeasuredRawInput').value), measuredVoltage: Number(byId('ecTdsMeasuredVoltageInput').value),
+    waterTemp: Number(byId('ecTdsWaterTempInput').value), referenceEcUsCm: Number(byId('tdsReferenceEcInput').value),
+    referenceScale: '500', tdsFactor: 0.5, note: byId('ecTdsPointNoteInput').value,
+  };
+  await requestTdsCalibration(`/api/devices/${DEVICE_ID}/tds-calibration-sets/${encodeURIComponent(selectedTdsCalibrationSetId)}/points`, {
+    method: 'POST', body: JSON.stringify(body),
+  });
+  await loadTdsCalibrationData();
+  setMessage('EC calibration point added to the selected draft set.', 'ok');
+}
+
+async function runTdsSetAction(action) {
+  if (!selectedTdsCalibrationSetId) throw new Error('Select a calibration set first');
+  if ((action === 'activate' || action === 'retire') && !window.confirm(`${action} calibration set ${selectedTdsCalibrationSetId}?`)) return;
+  await requestTdsCalibration(`/api/devices/${DEVICE_ID}/tds-calibration-sets/${encodeURIComponent(selectedTdsCalibrationSetId)}/${action}`, { method: 'POST', body: '{}' });
+  await loadTdsCalibrationData();
+  setMessage(`Calibration set ${action} completed. Auto Dosing was not enabled.`, 'ok');
 }
 
 function bindTdsCalibrationControls() {
-  byId('useLatestTdsButton').addEventListener('click', fillTdsCalibrationFromLatest);
-  byId('tdsCalibrationForm').addEventListener('submit', (event) => {
-    event.preventDefault();
-    saveTdsCalibration();
+  byId('tdsSetSelect').addEventListener('change', async (event) => { selectedTdsCalibrationSetId = event.target.value; await loadTdsCalibrationData(); });
+  byId('tdsReferenceEcInput').addEventListener('input', (event) => {
+    const ec = Number(event.target.value); byId('tdsDerivedPpmOutput').textContent = Number.isFinite(ec) && ec > 0 ? `${(ec * 0.5).toFixed(1)} ppm` : 'N/A';
   });
+  byId('ecUseLatestTdsButton').addEventListener('click', fillTdsCalibrationFromLatest);
+  byId('tdsSetCreateForm').addEventListener('submit', async (event) => { event.preventDefault(); try { await createTdsCalibrationSet(); } catch (error) { setMessage(`Calibration set error: ${error.message}`, 'error'); } });
+  byId('tdsPointForm').addEventListener('submit', async (event) => { event.preventDefault(); try { await addTdsCalibrationPoint(); } catch (error) { setMessage(`Calibration point error: ${error.message}`, 'error'); } });
+  byId('validateTdsSetButton').addEventListener('click', async () => { try { await runTdsSetAction('validate'); } catch (error) { setMessage(`Set validation: ${error.message}`, 'error'); } });
+  byId('activateTdsSetButton').addEventListener('click', async () => { try { await runTdsSetAction('activate'); } catch (error) { setMessage(`Set activation: ${error.message}`, 'error'); } });
+  byId('retireTdsSetButton').addEventListener('click', async () => { try { await runTdsSetAction('retire'); } catch (error) { setMessage(`Set retirement: ${error.message}`, 'error'); } });
 }
 
 function parseOptionalNumberInput(inputId) {
@@ -1007,7 +1206,8 @@ function formatPumpRunSummary(pump) {
 }
 
 function setAutoDosingFormDisabled(disabled) {
-  byId('autoDosingEnabledInput').disabled = disabled;
+  byId('autoDosingEnabledInput').disabled = true;
+  byId('autoTargetConfirmedInput').disabled = disabled;
   byId('autoTargetMinInput').disabled = disabled;
   byId('autoTargetMaxInput').disabled = disabled;
   byId('autoDoseMlInput').disabled = disabled;
@@ -1018,6 +1218,8 @@ function setAutoDosingFormDisabled(disabled) {
   byId('autoResponseEstimateInput').disabled = disabled;
   byId('autoResponseWorkingLevelInput').disabled = disabled;
   byId('saveAutoDosingSettingsButton').disabled = disabled;
+  byId('autoPrototypePresetButton').disabled = disabled;
+  byId('autoRealPresetButton').disabled = disabled;
 }
 
 function shouldUpdateAutoDosingFormInputs() {
@@ -1028,14 +1230,17 @@ function renderAutoDosingSettings(data) {
   const settings = data.data || {};
   const mixingDelayMinutes = Number(settings.mixingDelayMs || settings.cooldownMs) / 60000;
 
+  lastSavedAutoDosingEnabled = settings.enabled === true;
   byId('autoModeValue').textContent = formatValue(settings.mode || 'closed_loop_step');
   byId('autoDosingEnabledValue').textContent = settings.enabled ? 'Enabled' : 'Disabled';
   byId('autoDosingReasonValue').textContent = formatValue(settings.lastEvaluationReason);
+  byId('autoLastEvaluationAtValue').textContent = formatDate(settings.lastEvaluationAt);
   byId('autoDosingTdsValue').textContent = formatNumberWithUnit(settings.lastEvaluationTdsPpm, 2, 'ppm');
-  byId('autoDailyDoseValue').textContent = formatNumberWithUnit(settings.lastDailyDoseUsedMlPerPump, 2, 'ml');
+  byId('autoCropTargetValue').textContent = `${formatValue(settings.cropCode)} / ${settings.targetRangeConfirmed ? 'confirmed' : 'unconfirmed'}`;
 
   if (shouldUpdateAutoDosingFormInputs()) {
-    byId('autoDosingEnabledInput').checked = settings.enabled === true;
+    byId('autoDosingEnabledInput').checked = false;
+    byId('autoTargetConfirmedInput').checked = settings.targetRangeConfirmed === true;
     byId('autoTargetMinInput').value = formatNumber(settings.targetMinPpm, 0);
     byId('autoTargetMaxInput').value = formatNumber(settings.targetMaxPpm, 0);
     byId('autoDoseMlInput').value = formatNumber(settings.stepDoseMlPerPump || settings.doseMlPerPump, 2);
@@ -1046,7 +1251,18 @@ function renderAutoDosingSettings(data) {
     byId('autoResponseEstimateInput').value = formatNumber(settings.responseEstimatePpmPerMl, 2);
     byId('autoResponseWorkingLevelInput').value = formatNumber(settings.responseEstimateWorkingLevelLiters, 1);
     hasAutoDosingSettingsLoadedOnce = true;
+    updateMixingDelayWarning();
   }
+}
+
+function renderAutoDosingReadiness(data, settingsData) {
+  const readiness = data.data || { ready: false, reasons: ['readiness_unavailable'] };
+  const settings = settingsData.data || {};
+  latestAutoDosingReadiness = readiness;
+  byId('autoReadinessReasonsValue').textContent = readiness.ready
+    ? 'Ready'
+    : (readiness.reasons || []).join(', ');
+  byId('autoDosingEnabledInput').disabled = true;
 }
 
 function formatMixingCountdown(mixingUntil) {
@@ -1073,28 +1289,203 @@ function formatMixingCountdown(mixingUntil) {
   return `${formatDate(mixingUntil)} (${minutes}m ${seconds}s)`;
 }
 
+function getRunVersionLabel(run) {
+  return run && run.mode === 'closed_loop_step'
+    ? 'V2 closed_loop_step'
+    : 'V1 legacy';
+}
+
+function getRunResultLabel(run) {
+  if (!run || run.mode !== 'closed_loop_step') {
+    return 'legacy_run';
+  }
+
+  if (run.status !== 'completed' || !Number.isFinite(Number(run.deltaTdsPpm))) {
+    return 'pending';
+  }
+
+  const delta = Number(run.deltaTdsPpm);
+
+  if (delta > 0) {
+    return 'positive_response';
+  }
+
+  return delta >= -5 ? 'no_clear_change' : 'negative_or_unstable_response';
+}
+
+function getAutoDosingState(settings, activeRun, dailyUsage) {
+  if (!settings.enabled) {
+    return 'disabled';
+  }
+
+  if (activeRun && activeRun.status === 'mixing_wait') {
+    return 'mixing_wait';
+  }
+
+  if (activeRun && activeRun.status === 'in_progress') {
+    return 'dosing';
+  }
+
+  if (!latestAutoDosingReadiness || latestAutoDosingReadiness.ready !== true) {
+    return 'blocked';
+  }
+
+  const lastEvaluationTime = new Date(settings.lastEvaluationAt).getTime();
+  const dailyWindowStart = new Date(dailyUsage.calculationWindowStartedAt).getTime();
+  const hasCurrentDailyLimitReason = settings.lastEvaluationReason === 'daily_dose_limit_reached'
+    && Number.isFinite(lastEvaluationTime)
+    && Number.isFinite(dailyWindowStart)
+    && lastEvaluationTime >= dailyWindowStart;
+
+  if (dailyUsage.isLimitReached || hasCurrentDailyLimitReason) {
+    return 'daily_limit_reached';
+  }
+
+  if (settings.lastEvaluationReason === 'within_target_range') {
+    return 'within_target_range';
+  }
+
+  const blockedReasons = new Set([
+    'main_pump_not_running',
+    'water_level_low',
+    'water_temp_invalid',
+    'tds_ppm_missing',
+    'tds_unstable',
+    'pump_calibration_missing',
+    'duration_invalid',
+    'duration_exceeds_limit',
+    'above_target_range',
+    'tds_calibration_set_missing',
+    'tds_calibration_set_inactive',
+    'tds_calibration_insufficient_points',
+    'tds_outside_calibration_range',
+    'tds_calibration_warning',
+    'tds_temperature_not_compensated',
+    'tds_control_invalid',
+    'tds_target_outside_calibrated_range',
+    'tds_target_range_unconfirmed',
+  ]);
+
+  return blockedReasons.has(settings.lastEvaluationReason) ? 'blocked' : 'ready';
+}
+
+function renderAutoDosingSafety(settingsData, activeRunData, dailyUsage, latestData, calibrationData) {
+  const settings = settingsData.data || {};
+  const activeRun = activeRunData.data || null;
+  const latest = latestData.latest || {};
+  const calibrations = calibrationData.data || {};
+  const pumpAReady = Boolean(calibrations.A && Number(calibrations.A.flowRateMlPerSec) > 0);
+  const pumpBReady = Boolean(calibrations.B && Number(calibrations.B.flowRateMlPerSec) > 0);
+
+  byId('autoSafetyStateValue').textContent = getAutoDosingState(settings, activeRun, dailyUsage);
+  byId('autoCurrentTdsValue').textContent = formatNumberWithUnit(latest.tdsPpm, 2, 'ppm');
+  byId('autoTargetRangeValue').textContent = `${formatNumber(settings.targetMinPpm, 0)} - ${formatNumber(settings.targetMaxPpm, 0)} ppm`;
+  byId('autoMainPumpValue').textContent = formatBoolOnOff(latest.pumpMain);
+  byId('autoWaterLevelValue').textContent = formatValue(latest.waterLevel);
+  byId('autoRequireMainPumpValue').textContent = settings.requireMainPumpOn ? 'Required' : 'Not required';
+  byId('autoPumpCalibrationValue').textContent = `A: ${pumpAReady ? 'Ready' : 'Missing'} | B: ${pumpBReady ? 'Ready' : 'Missing'}`;
+  byId('autoDailyLimitWarning').hidden = getAutoDosingState(settings, activeRun, dailyUsage)
+    !== 'daily_limit_reached';
+}
+
+function renderDailyDoseUsage(data) {
+  const usage = data.data || data;
+  const progress = Number.isFinite(Number(usage.progressPercentage))
+    ? Math.min(100, Math.max(0, Number(usage.progressPercentage)))
+    : 0;
+
+  byId('autoDailyDoseValue').textContent = formatNumberWithUnit(usage.dailyDoseUsedMlPerPump, 2, 'ml');
+  byId('autoDailyDoseMaxValue').textContent = formatNumberWithUnit(usage.maxDailyDoseMlPerPump, 2, 'ml');
+  byId('autoDailyDoseRemainingValue').textContent = formatNumberWithUnit(usage.remainingDailyDoseMlPerPump, 2, 'ml');
+  byId('autoDailyWindowValue').textContent = formatDate(usage.calculationWindowStartedAt);
+  byId('autoDailyResetValue').textContent = formatDate(usage.lastDailyResetAt);
+  byId('autoDailyRunsCountedValue').textContent = formatValue(usage.runsCounted);
+  byId('autoDailyDoseProgress').style.width = `${progress}%`;
+  byId('autoDailyDoseProgressText').textContent = `${formatNumber(progress, 1)}% used on ${formatValue(usage.localDate)}`;
+}
+
 function renderActiveDosingRun(data) {
   const run = data.data || null;
 
-  byId('autoDosingActiveRunValue').textContent = run
-    ? `${formatValue(run.status)} | ${formatValue(run.currentStep)} | ${formatValue(run.runId)}`
-    : 'None';
-  byId('autoMixingUntilValue').textContent = run && run.currentStep === 'mixing_wait'
+  byId('autoActiveRunIdValue').textContent = run ? formatValue(run.runId) : 'None';
+  byId('autoActiveRunStatusValue').textContent = run ? formatValue(run.status) : 'N/A';
+  byId('autoActiveRunStepValue').textContent = run ? formatValue(run.currentStep) : 'N/A';
+  byId('autoActiveRunTdsValue').textContent = run ? formatNumberWithUnit(run.tdsPpmAtStart, 2, 'ppm') : 'N/A';
+  byId('autoActiveRunDoseValue').textContent = run
+    ? formatNumberWithUnit(run.stepDoseMlPerPump || run.doseMlPerPump, 2, 'ml')
+    : 'N/A';
+  byId('autoActivePumpAValue').textContent = run ? formatPumpRunSummary(run.pumpA) : 'N/A';
+  byId('autoActivePumpBValue').textContent = run ? formatPumpRunSummary(run.pumpB) : 'N/A';
+  byId('autoActiveMixingStartedValue').textContent = run ? formatDate(run.mixingStartedAt) : 'N/A';
+  byId('autoActiveMixingUntilValue').textContent = run ? formatDate(run.mixingUntil) : 'N/A';
+  byId('autoActiveCountdownValue').textContent = run && run.status === 'mixing_wait'
     ? formatMixingCountdown(run.mixingUntil)
     : 'N/A';
+  byId('autoActiveCompletedValue').textContent = run ? formatDate(run.completedAt) : 'N/A';
+}
+
+function renderLatestCompletedRun(runs) {
+  const run = runs.find((item) => item.mode === 'closed_loop_step' && item.status === 'completed');
+
+  byId('autoLatestTdsBeforeValue').textContent = run ? formatNumberWithUnit(run.tdsPpmAtStart, 2, 'ppm') : 'N/A';
+  byId('autoLatestTdsAfterValue').textContent = run ? formatNumberWithUnit(run.tdsPpmAfterMixing, 2, 'ppm') : 'N/A';
+  byId('autoLatestDeltaValue').textContent = run ? formatNumberWithUnit(run.deltaTdsPpm, 2, 'ppm') : 'N/A';
+  byId('autoLatestStepDoseValue').textContent = run
+    ? formatNumberWithUnit(run.stepDoseMlPerPump || run.doseMlPerPump, 2, 'ml')
+    : 'N/A';
+  byId('autoLatestMixingDelayValue').textContent = run
+    ? formatNumberWithUnit(Number(run.mixingDelayMs) / 60000, 1, 'min')
+    : 'N/A';
+  byId('autoLatestCompletedValue').textContent = run ? formatDate(run.completedAt) : 'N/A';
+  byId('autoLatestResultValue').textContent = run ? getRunResultLabel(run) : 'N/A';
+
+  if (!run) {
+    byId('autoLatestResultNote').textContent = 'No completed V2 run yet.';
+    return;
+  }
+
+  const delta = Number(run.deltaTdsPpm);
+  byId('autoLatestResultNote').textContent = delta >= 20 && delta <= 40
+    ? 'Delta is within the expected +20 to +40 ppm prototype range.'
+    : 'Note: delta is outside the expected +20 to +40 ppm prototype range.';
+}
+
+function filterDosingRuns(runs, filter) {
+  if (filter === 'v2') {
+    return runs.filter((run) => run.mode === 'closed_loop_step');
+  }
+
+  if (filter === 'v1') {
+    return runs.filter((run) => run.mode !== 'closed_loop_step');
+  }
+
+  if (filter === 'active') {
+    return runs.filter((run) => ['in_progress', 'mixing_wait'].includes(run.status));
+  }
+
+  if (filter === 'completed') {
+    return runs.filter((run) => run.status === 'completed');
+  }
+
+  return runs;
 }
 
 function renderDosingRuns(data) {
-  const runs = Array.isArray(data.data) ? data.data : [];
+  if (data) {
+    latestAutoDosingRuns = Array.isArray(data.data) ? data.data : [];
+  }
+
+  const filter = byId('autoDosingRunsFilter').value;
+  const runs = filterDosingRuns(latestAutoDosingRuns, filter);
   const tableBody = byId('autoDosingRunsBody');
 
   tableBody.textContent = '';
-  byId('autoDosingRunsStatus').textContent = `Latest ${runs.length} dosing runs`;
+  byId('autoDosingRunsStatus').textContent = `Showing ${runs.length} of ${latestAutoDosingRuns.length} dosing runs`;
 
   if (runs.length === 0) {
     const row = document.createElement('tr');
     appendCell(row, 'No dosing runs yet');
-    row.firstChild.colSpan = 9;
+    row.firstChild.colSpan = 15;
     tableBody.appendChild(row);
     return;
   }
@@ -1102,34 +1493,199 @@ function renderDosingRuns(data) {
   runs.forEach((run) => {
     const row = document.createElement('tr');
     appendCell(row, formatDate(run.createdAt));
-    appendCell(row, formatValue(run.mode));
+    appendCell(row, getRunVersionLabel(run));
     appendCell(row, formatValue(run.status));
+    appendCell(row, formatValue(run.currentStep));
     appendCell(row, formatNumber(run.tdsPpmAtStart, 2));
     appendCell(row, formatNumber(run.tdsPpmAfterMixing, 2));
     appendCell(row, formatNumber(run.deltaTdsPpm, 2));
     appendCell(row, formatNumber(run.stepDoseMlPerPump || run.doseMlPerPump, 2));
+    appendCell(row, formatNumberWithUnit(Number(run.mixingDelayMs) / 60000, 1, 'min'));
     appendCell(row, run.mixingUntil ? formatDate(run.mixingUntil) : 'N/A');
+    appendCell(row, formatDate(run.completedAt));
     appendCell(row, formatPumpRunSummary(run.pumpA));
     appendCell(row, formatPumpRunSummary(run.pumpB));
+    appendCell(row, formatNumber(run.dailyDoseUsedBefore, 2));
+    appendCell(row, getRunResultLabel(run));
     tableBody.appendChild(row);
   });
 }
 
+function getEventCategory(event) {
+  const runTypes = new Set([
+    'run_started',
+    'pump_a_completed',
+    'pump_b_completed',
+    'mixing_wait_started',
+    'run_completed',
+  ]);
+
+  if (event.eventType === 'settings_updated') {
+    return 'settings';
+  }
+
+  if (runTypes.has(event.eventType)) {
+    return 'run';
+  }
+
+  if (['skip', 'daily_limit_reached', 'manual_daily_reset'].includes(event.eventType)) {
+    return 'safety';
+  }
+
+  return 'all';
+}
+
+function renderAutoDosingEvents(data) {
+  if (data) {
+    latestAutoDosingEvents = Array.isArray(data.data) ? data.data : [];
+  }
+
+  const filter = byId('autoDosingEventsFilter').value;
+  const events = latestAutoDosingEvents.filter((event) => {
+    if (filter === 'all') {
+      return true;
+    }
+
+    if (filter === 'skip') {
+      return event.eventType === 'skip' || event.eventType === 'daily_limit_reached';
+    }
+
+    return getEventCategory(event) === filter;
+  });
+  const tableBody = byId('autoDosingEventsBody');
+
+  tableBody.textContent = '';
+  byId('autoDosingEventsStatus').textContent = `Showing ${events.length} of ${latestAutoDosingEvents.length} events`;
+
+  if (events.length === 0) {
+    const row = document.createElement('tr');
+    appendCell(row, 'No matching auto dosing events');
+    row.firstChild.colSpan = 8;
+    tableBody.appendChild(row);
+    return;
+  }
+
+  events.forEach((event) => {
+    const row = document.createElement('tr');
+    appendCell(row, formatDate(event.createdAt));
+    appendCell(row, formatValue(event.eventType));
+    appendCell(row, formatValue(event.reason));
+    appendCell(row, formatNumber(event.tdsPpm, 2));
+    appendCell(row, formatBoolOnOff(event.mainPumpOn));
+    appendCell(row, formatValue(event.waterLevel));
+    appendCell(row, formatNumber(event.dailyDoseUsedMlPerPump, 2));
+    appendCell(row, formatValue(event.message));
+    tableBody.appendChild(row);
+  });
+}
+
+function renderAutoDosingEventSummary(data) {
+  const summary = data.data || {};
+  const latest = summary.latest;
+
+  byId('autoDosingEventsSummary').textContent = latest
+    ? `${formatValue(summary.total)} events in ${formatValue(summary.windowHours)}h | Latest: ${formatValue(latest.eventType)} / ${formatValue(latest.reason)} at ${formatDate(latest.createdAt)}`
+    : 'No Auto Dosing events recorded yet.';
+}
+
 async function loadAutoDosingData() {
-  const [settings, activeRun, runs] = await Promise.all([
+  const [settings, readiness, activeRun, runs, events, eventSummary, dailyUsage, latest, calibrations] = await Promise.all([
     fetchJson(`/api/devices/${DEVICE_ID}/auto-dosing/settings`),
+    fetchJson(`/api/devices/${DEVICE_ID}/auto-dosing/readiness`),
     fetchJson(`/api/devices/${DEVICE_ID}/auto-dosing/active-run`),
-    fetchJson(`/api/devices/${DEVICE_ID}/auto-dosing/runs?limit=10`),
+    fetchJson(`/api/devices/${DEVICE_ID}/auto-dosing/runs?limit=50`),
+    fetchJson(`/api/devices/${DEVICE_ID}/auto-dosing/events?limit=50`),
+    fetchJson(`/api/devices/${DEVICE_ID}/auto-dosing/events/summary`),
+    fetchJson(`/api/devices/${DEVICE_ID}/auto-dosing/daily-usage`),
+    fetchJson(`/api/devices/${DEVICE_ID}/latest`),
+    fetchJson(`/api/devices/${DEVICE_ID}/pump-calibrations/latest`),
   ]);
 
   renderAutoDosingSettings(settings);
+  renderAutoDosingReadiness(readiness, settings);
+  renderDailyDoseUsage(dailyUsage);
+  renderAutoDosingSafety(settings, activeRun, dailyUsage, latest, calibrations);
   renderActiveDosingRun(activeRun);
   renderDosingRuns(runs);
+  renderLatestCompletedRun(latestAutoDosingRuns);
+  renderAutoDosingEvents(events);
+  renderAutoDosingEventSummary(eventSummary);
   byId('autoDosingStatus').textContent = 'Auto dosing data loaded';
+}
+
+function updateMixingDelayWarning() {
+  const mixingDelayMinutes = Number(byId('autoMixingDelayMinutesInput').value);
+  byId('autoMixingDelayWarning').hidden = !Number.isFinite(mixingDelayMinutes)
+    || mixingDelayMinutes >= 15;
+}
+
+function applyAutoDosingPreset(type) {
+  byId('autoDosingEnabledInput').checked = false;
+  byId('autoTargetConfirmedInput').checked = false;
+  byId('autoDoseMlInput').value = '1';
+  byId('autoMaxDoseMlInput').value = '1';
+  byId('autoMaxDailyDoseMlInput').value = type === 'prototype' ? '1' : '2';
+  byId('autoMixingDelayMinutesInput').value = type === 'prototype' ? '1' : '15';
+  byId('autoRequireMainPumpOnInput').checked = true;
+  isAutoDosingFormDirty = true;
+  updateMixingDelayWarning();
+  setMessage(
+    type === 'prototype'
+      ? 'Prototype Safe Test Preset applied. Press Save Settings to apply.'
+      : 'Real Nutrient Conservative Preset applied. Press Save Settings to apply.',
+    'ok',
+  );
+}
+
+async function resetDailyDoseCounter() {
+  const confirmation = window.prompt(
+    'Type RESET DAILY DOSE to reset the prototype daily counter. This does not remove nutrient already added.',
+    '',
+  );
+
+  if (confirmation === null) {
+    return;
+  }
+
+  if (confirmation !== 'RESET DAILY DOSE') {
+    setMessage('Daily dose reset cancelled: confirmation text did not match.', 'error');
+    return;
+  }
+
+  byId('resetDailyDoseButton').disabled = true;
+  setMessage('Resetting daily dose counter...');
+
+  try {
+    const response = await fetch(`/api/devices/${DEVICE_ID}/auto-dosing/daily-usage/reset`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        confirmText: confirmation,
+        reason: 'prototype_test_session',
+      }),
+    });
+    const data = await response.json();
+
+    if (!response.ok || data.ok === false) {
+      const errorText = Array.isArray(data.errors) ? data.errors.join('; ') : (data.message || data.error || 'request failed');
+      throw new Error(errorText);
+    }
+
+    await loadAutoDosingData();
+    setMessage('Daily dose counter reset. Physical nutrient was not removed.', 'ok');
+  } catch (error) {
+    setMessage(`Daily dose reset error: ${error.message}`, 'error');
+  } finally {
+    byId('resetDailyDoseButton').disabled = false;
+  }
 }
 
 async function saveAutoDosingSettings() {
   const enabled = byId('autoDosingEnabledInput').checked;
+  const targetRangeConfirmed = byId('autoTargetConfirmedInput').checked;
   const targetMinPpm = Number(byId('autoTargetMinInput').value);
   const targetMaxPpm = Number(byId('autoTargetMaxInput').value);
   const stepDoseMlPerPump = Number(byId('autoDoseMlInput').value);
@@ -1155,8 +1711,8 @@ async function saveAutoDosingSettings() {
     return;
   }
 
-  if (!Number.isFinite(mixingDelayMinutes) || mixingDelayMinutes <= 0) {
-    setMessage('Auto dosing error: mixing delay minutes must be greater than 0.', 'error');
+  if (!Number.isFinite(mixingDelayMinutes) || mixingDelayMinutes < 1) {
+    setMessage('Auto dosing error: mixing delay must be at least 1 minute.', 'error');
     return;
   }
 
@@ -1170,7 +1726,11 @@ async function saveAutoDosingSettings() {
     return;
   }
 
-  if (stepDoseMlPerPump > maxDoseMlPerPumpPerRun || stepDoseMlPerPump > maxDailyDoseMlPerPump) {
+  if (
+    stepDoseMlPerPump > maxDoseMlPerPumpPerRun
+    || stepDoseMlPerPump > maxDailyDoseMlPerPump
+    || maxDoseMlPerPumpPerRun > maxDailyDoseMlPerPump
+  ) {
     setMessage('Auto dosing error: step dose must fit within per-run and daily limits.', 'error');
     return;
   }
@@ -1182,6 +1742,23 @@ async function saveAutoDosingSettings() {
 
   if (!Number.isFinite(responseEstimateWorkingLevelLiters) || responseEstimateWorkingLevelLiters <= 0) {
     setMessage('Auto dosing error: response working level must be greater than 0.', 'error');
+    return;
+  }
+
+  if (
+    enabled
+    && !lastSavedAutoDosingEnabled
+    && !window.confirm('Auto Dosing will be able to run Pump A and Pump B automatically. Use only when pump outputs are connected correctly and reservoir level is normal.')
+  ) {
+    setMessage('Auto Dosing enable cancelled.', 'error');
+    return;
+  }
+
+  if (
+    mixingDelayMinutes < 15
+    && !window.confirm('Short mixing delay is for testing only. Continue saving this test setting?')
+  ) {
+    setMessage('Auto Dosing settings save cancelled.', 'error');
     return;
   }
 
@@ -1197,6 +1774,8 @@ async function saveAutoDosingSettings() {
       },
       body: JSON.stringify({
         mode: 'closed_loop_step',
+        cropCode: 'cai_ngot',
+        targetRangeConfirmed,
         enabled,
         targetMinPpm,
         targetMaxPpm,
@@ -1234,6 +1813,7 @@ function bindAutoDosingControls() {
   const form = byId('autoDosingSettingsForm');
   const inputs = [
     byId('autoDosingEnabledInput'),
+    byId('autoTargetConfirmedInput'),
     byId('autoTargetMinInput'),
     byId('autoTargetMaxInput'),
     byId('autoDoseMlInput'),
@@ -1252,6 +1832,27 @@ function bindAutoDosingControls() {
     input.addEventListener('change', () => {
       isAutoDosingFormDirty = true;
     });
+  });
+
+  [byId('autoTargetMinInput'), byId('autoTargetMaxInput')].forEach((input) => {
+    input.addEventListener('input', () => {
+      byId('autoTargetConfirmedInput').checked = false;
+    });
+  });
+
+  byId('autoMixingDelayMinutesInput').addEventListener('input', updateMixingDelayWarning);
+  byId('autoPrototypePresetButton').addEventListener('click', () => {
+    applyAutoDosingPreset('prototype');
+  });
+  byId('autoRealPresetButton').addEventListener('click', () => {
+    applyAutoDosingPreset('real');
+  });
+  byId('resetDailyDoseButton').addEventListener('click', resetDailyDoseCounter);
+  byId('autoDosingRunsFilter').addEventListener('change', () => {
+    renderDosingRuns();
+  });
+  byId('autoDosingEventsFilter').addEventListener('change', () => {
+    renderAutoDosingEvents();
   });
 
   form.addEventListener('focusin', () => {
@@ -1292,6 +1893,7 @@ async function loadDashboard() {
     renderHealth(health);
     renderAlerts(activeAlerts);
     renderLatest(latest);
+    renderTelemetryIdentity(latest, deviceLogs);
     renderLogs(deviceLogs);
     renderTrend(latestLogs);
     await Promise.all([
@@ -1299,6 +1901,7 @@ async function loadDashboard() {
       loadTdsCalibrationData(),
       loadNutrientResponseData(),
       loadAutoDosingData(),
+      loadShadowData(),
     ]);
 
     byId('lastRefreshTime').textContent = new Date().toLocaleString();

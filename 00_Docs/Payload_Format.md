@@ -1,21 +1,23 @@
-# Payload Format - Hydroponic_IoT_ESP32
+# Payload Format - Phase 22A Fix 1
 
-All MQTT payloads must use JSON.
-
-## Main Firmware V2 Sensor Payload
-
-MQTT topic: `hydroponic/device001/sensor`
-
-This payload is published by ESP32 Main Firmware V2. It contains raw TDS ADC data, estimated TDS voltage, water temperature, water level, pump states, and device uptime.
+## ESP32 Sensor Payload
 
 ```json
 {
+  "schemaVersion": 2,
   "deviceId": "device001",
-  "tdsRaw": 2814,
-  "tdsVoltage": 2.267,
-  "tdsMin": 2760,
-  "tdsMax": 2843,
-  "waterTemp": 31.00,
+  "bootId": "a1b2c3d4e5f60718",
+  "measurementSeq": 42,
+  "measurementId": "device001:a1b2c3d4e5f60718:42",
+  "sampledAtUptimeMs": 123456,
+  "tdsRaw": 1830,
+  "tdsVoltage": 1.475,
+  "tdsMin": 1815,
+  "tdsMax": 1844,
+  "tdsSampleCount": 30,
+  "tdsSpreadRaw": 29,
+  "tdsWindowStable": true,
+  "waterTemp": 26.4,
   "waterTempValid": true,
   "waterLevel": "normal",
   "pumpMain": false,
@@ -27,88 +29,47 @@ This payload is published by ESP32 Main Firmware V2. It contains raw TDS ADC dat
 }
 ```
 
-### Current V2 Notes
+Phase 22A validates identity fields together. A payload that contains any V2 identity
+field but is incomplete or inconsistent is rejected. A payload with no identity fields
+is labeled legacy and may be stored for history, but cannot update `devices.latest`,
+contribute to stability, enter Shadow eligibility, or reach control.
 
-- `tdsPpm` is not implemented yet. Current firmware only publishes raw ADC and estimated voltage.
-- `ph` remains `null` because pH is excluded from the current phase.
-- `createdAt` is not included yet because NTP time is not implemented on the ESP32.
-- `uptimeMs` is included so payload timing can be checked before NTP is added.
-- Backend/database code should add a server-side timestamp later.
+The backend also enforces the exact firmware relationship:
 
-## Pump Command Payload
-
-Reserved for a later phase. MQTT pump command subscription is not implemented in Main Firmware V2.
-
-```json
-{
-  "deviceId": "device001",
-  "pump": "A",
-  "action": "pulse",
-  "durationMs": 5000,
-  "reason": "manual_test"
-}
+```text
+tdsWindowStable = (tdsSampleCount == 30 && tdsSpreadRaw <= 50)
 ```
 
-## Pump Status Payload
+A boolean that disagrees with sample count/spread is rejected. Stability evaluation checks
+the relationship again and does not trust the boolean alone.
 
-Reserved for a later phase.
+## Stored Measurement Quality Contract
 
-```json
-{
-  "deviceId": "device001",
-  "pump": "A",
-  "action": "pulse",
-  "durationMs": 5000,
-  "success": true,
-  "pumpMain": false,
-  "pumpA": false,
-  "pumpB": false,
-  "reason": "manual_test"
-}
-```
+Each accepted V2 `sensor_logs` row and `devices.latest` includes:
 
-## Alert Payload
+`measurementAt`, `receivedAt`, `measurementFreshnessVerified`, `measurementTimeSource`,
+`measurementAgeAtReceiptMs`, `tdsRaw`, `tdsVoltage`, `tdsMin`, `tdsMax`, `tdsSampleCount`, `tdsSpreadRaw`,
+`tdsWindowStable`, `tdsVoltage25`, `ecUsCm`, `tdsPpm`, `tdsFactor`, `tdsScale`,
+`tdsCalibrationSetId`, `tdsCalibrationMode`, `tdsCalibrationPointCount`,
+`tdsCalibrationInRange`, `tdsCalibrationWarning`, `tdsTemperatureCompensated`,
+`tdsTemperatureAlphaPerC`, `tdsTemperatureFactorUsed`, `tdsTemperatureReferenceC`,
+`tdsStable`, `tdsStabilitySampleCount`, `tdsStabilityDistinctMeasurementCount`, `tdsStabilitySpreadPpm`,
+`tdsStabilityThresholdPpm`, `tdsStabilityReason`, `tdsControlValid`, and
+`tdsControlInvalidReasons`.
 
-Reserved for a later phase.
+It also includes `schemaVersion`, `bootId`, `measurementSeq`, `measurementId`,
+`sampledAtUptimeMs`, `telemetryIdentityValid`, `telemetryDuplicate`,
+`telemetryOrderStatus`, `telemetryBootSessionValid`, `controlEligible`,
+and `controlExclusionReasons`. `sensor_logs` additionally records `processingState`,
+`processingStage`, `processingAttempt`, lease/failure/completion timestamps, and a
+non-secret processing error code when applicable.
 
-```json
-{
-  "deviceId": "device001",
-  "type": "water_level_low",
-  "level": "warning",
-  "message": "Water level is low",
-  "resolved": false
-}
-```
+`measurementAt` is not copied from `receivedAt`. Fix 1 derives it from the same-boot
+`sampledAtUptimeMs` delta. Without a trustworthy anchor, freshness is unverified and the
+measurement is excluded from control/Shadow eligibility even if it was just received.
 
-## Valid Enum Values
+Outside the active set range, `ecUsCm` and `tdsPpm` are null. No extrapolated control
+value is published or stored.
 
-### waterLevel
-
-- normal
-- low
-- error
-
-### pump
-
-- main
-- A
-- B
-- spare
-
-### action
-
-- on
-- off
-- pulse
-
-### reason
-
-- manual_test
-- calibration
-- auto_dosing
-
-## Notes
-
-- `auto_dosing` is reserved for later. Do not implement full auto dosing now.
-- Pump command subscription is not part of Main Firmware V2.
+Pump command/status payloads remain unchanged. Pump A/B remain pulse-only; continuous
+`set` applies only to the main pump.

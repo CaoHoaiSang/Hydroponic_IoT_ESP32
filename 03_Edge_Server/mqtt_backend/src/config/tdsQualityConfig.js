@@ -1,0 +1,57 @@
+const TDS_REFERENCE_SCALE = '500';
+const TDS_FACTOR = 0.5;
+const TDS_TEMPERATURE_REFERENCE_C = 25;
+const TDS_TEMPERATURE_ALPHA_PER_C = 0.02;
+const TDS_ADC_MAX = 4095;
+const TDS_ADC_REFERENCE_VOLTAGE = 3.3;
+const TDS_SENSOR_MAX_VOLTAGE = 2.3;
+const TDS_ADC_VOLTAGE_TOLERANCE = 0.02;
+const TDS_REFERENCE_PPM_TOLERANCE = 0.1;
+const TDS_CALIBRATION_MIN_POINTS = 3;
+const TDS_WINDOW_SAMPLE_COUNT = 30;
+const TDS_WINDOW_MAX_SPREAD_RAW = 50;
+
+function positiveIntegerFromEnv(name, fallback) {
+  const value = Number.parseInt(process.env[name], 10);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function positiveNumberFromEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+const TDS_STABILITY_REQUIRED_SAMPLES = positiveIntegerFromEnv(
+  'TDS_STABILITY_REQUIRED_SAMPLES',
+  3,
+);
+const TDS_STABILITY_WINDOW_MS = positiveIntegerFromEnv('TDS_STABILITY_WINDOW_MS', 120000);
+const TDS_STABILITY_MIN_SPREAD_PPM = positiveNumberFromEnv(
+  'TDS_STABILITY_MIN_SPREAD_PPM',
+  20,
+);
+const TDS_STABILITY_MAX_SPREAD_PERCENT = positiveNumberFromEnv(
+  'TDS_STABILITY_MAX_SPREAD_PERCENT',
+  0.03,
+);
+const TDS_CONTROL_MAX_AGE_MS = positiveIntegerFromEnv('TDS_CONTROL_MAX_AGE_MS', 120000);
+
+module.exports = {
+  TDS_REFERENCE_SCALE,
+  TDS_FACTOR,
+  TDS_TEMPERATURE_REFERENCE_C,
+  TDS_TEMPERATURE_ALPHA_PER_C,
+  TDS_ADC_MAX,
+  TDS_ADC_REFERENCE_VOLTAGE,
+  TDS_SENSOR_MAX_VOLTAGE,
+  TDS_ADC_VOLTAGE_TOLERANCE,
+  TDS_REFERENCE_PPM_TOLERANCE,
+  TDS_CALIBRATION_MIN_POINTS,
+  TDS_WINDOW_SAMPLE_COUNT,
+  TDS_WINDOW_MAX_SPREAD_RAW,
+  TDS_STABILITY_REQUIRED_SAMPLES,
+  TDS_STABILITY_WINDOW_MS,
+  TDS_STABILITY_MIN_SPREAD_PPM,
+  TDS_STABILITY_MAX_SPREAD_PERCENT,
+  TDS_CONTROL_MAX_AGE_MS,
+};

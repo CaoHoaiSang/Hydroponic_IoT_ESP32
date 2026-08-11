@@ -4,8 +4,9 @@
 #include <Arduino.h>
 
 #include "Sensors.h"
+#include "TelemetryIdentity.h"
 
-String buildStatusPayload(const SensorData& data);
+String buildStatusPayload(const SensorData& data, const TelemetryIdentity& identity);
 String buildPumpStatusPayload(
   const String& commandId,
   const String& pump,
@@ -17,6 +18,6 @@ String buildPumpStatusPayload(
   const String& status,
   const String& message
 );
-void printStatusPayload(const SensorData& data);
+void printSensorStatus(const SensorData& data);
 
 #endif

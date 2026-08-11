@@ -90,7 +90,7 @@ static void connectMqttIfNeeded() {
 void mqttBegin() {
   mqttClient.setServer(MQTT_HOST, MQTT_PORT);
   mqttClient.setCallback(handleMqttMessage);
-  mqttClient.setBufferSize(768);
+  mqttClient.setBufferSize(MQTT_PACKET_BUFFER_SIZE);
   startWifiConnection();
 }
 

@@ -10,6 +10,8 @@
 #include "PayloadBuilder.h"
 #include "Pumps.h"
 #include "Sensors.h"
+#include "TelemetryIdentity.h"
+#include "TelemetryPublishState.h"
 
 #include <ctype.h>
 
@@ -37,7 +39,6 @@ bool hasSensorData = false;
 PulseTarget activePulse = PULSE_NONE;
 unsigned long activePulseDurationMs = DEFAULT_PULSE_MS;
 unsigned long pulseStartedMs = 0;
-unsigned long previousSensorReadMs = 0;
 unsigned long previousStatusPrintMs = 0;
 unsigned long previousMqttPublishMs = 0;
 
@@ -48,6 +49,7 @@ String activeCommandAction = "pulse";
 unsigned long activeCommandDurationMs = 0;
 
 String serialCommand = "";
+TelemetryPublishState<String> sensorPublishState;
 
 void printPumpState(const char* pumpName, bool on);
 void printHelp();
@@ -98,25 +100,36 @@ void printHelp() {
 }
 
 void readAndStoreSensors() {
+  sensorsUpdate(millis());
   latestSensorData = readSensors();
   hasSensorData = true;
 }
 
 void printImmediateStatus() {
   readAndStoreSensors();
-  printStatusPayload(latestSensorData);
+  printSensorStatus(latestSensorData);
 }
 
 void publishLatestSensorPayload() {
-  if (!hasSensorData) {
-    readAndStoreSensors();
+  if (!sensorPublishState.pending()) {
+    if (!hasSensorData) {
+      readAndStoreSensors();
+    }
+
+    const TelemetryIdentity identity = createTelemetryMeasurementIdentity(millis());
+    sensorPublishState.begin(buildStatusPayload(latestSensorData, identity), identity.measurementId);
   }
 
-  String payload = buildStatusPayload(latestSensorData);
-  Serial.println(payload);
+  Serial.print("MQTT sensor measurement: ");
+  Serial.println(sensorPublishState.measurementId());
 
-  bool published = publishSensorPayload(payload);
+  bool published = publishSensorPayload(sensorPublishState.payload());
   Serial.println(published ? "MQTT sensor publish: OK" : "MQTT sensor publish: FAILED");
+
+  sensorPublishState.recordPublishResult(published);
+  if (!published) {
+    Serial.println("MQTT retry will keep the same measurement identity and payload.");
+  }
 }
 
 void publishPumpCommandStatus(
@@ -668,6 +681,7 @@ void readSerialCommands() {
 
 void setup() {
   Serial.begin(SERIAL_BAUDRATE);
+  telemetryIdentityBegin();
 
   sensorsBegin();
   pumpsBegin();
@@ -679,6 +693,10 @@ void setup() {
   Serial.println("Project: Hydroponic_IoT_ESP32");
   Serial.print("Device ID: ");
   Serial.println(DEVICE_ID);
+  Serial.print("Telemetry schema: ");
+  Serial.println(TELEMETRY_SCHEMA_VERSION);
+  Serial.print("Boot ID: ");
+  Serial.println(getTelemetryBootId());
   Serial.println("Mode: Wi-Fi + MQTT Sensor Publish + Pump Command V2");
   Serial.print("MQTT sensor topic: ");
   Serial.println(MQTT_TOPIC_SENSOR);
@@ -703,11 +721,9 @@ void loop() {
   readSerialCommands();
   updatePulse();
   mqttLoop();
-
-  if (currentMs - previousSensorReadMs >= SENSOR_READ_INTERVAL_MS) {
-    previousSensorReadMs = currentMs;
-    readAndStoreSensors();
-  }
+  sensorsUpdate(currentMs);
+  latestSensorData = readSensors();
+  hasSensorData = true;
 
   if (currentMs - previousStatusPrintMs >= STATUS_PRINT_INTERVAL_MS) {
     previousStatusPrintMs = currentMs;
@@ -716,7 +732,7 @@ void loop() {
       readAndStoreSensors();
     }
 
-    printStatusPayload(latestSensorData);
+    printSensorStatus(latestSensorData);
   }
 
   if (currentMs - previousMqttPublishMs >= MQTT_PUBLISH_INTERVAL_MS) {

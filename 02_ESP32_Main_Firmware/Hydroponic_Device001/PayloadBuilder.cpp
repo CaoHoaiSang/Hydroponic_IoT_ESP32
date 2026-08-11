@@ -31,14 +31,34 @@ static String escapeJsonString(const String& value) {
   return escaped;
 }
 
-String buildStatusPayload(const SensorData& data) {
+String buildStatusPayload(const SensorData& data, const TelemetryIdentity& identity) {
   String payload;
-  payload.reserve(384);
+  payload.reserve(768);
 
   payload += "{\n";
+  payload += "  \"schemaVersion\": ";
+  payload += String(identity.schemaVersion);
+  payload += ",\n";
+
   payload += "  \"deviceId\": \"";
   payload += DEVICE_ID;
   payload += "\",\n";
+
+  payload += "  \"bootId\": \"";
+  payload += escapeJsonString(identity.bootId);
+  payload += "\",\n";
+
+  payload += "  \"measurementSeq\": ";
+  payload += String(identity.measurementSeq);
+  payload += ",\n";
+
+  payload += "  \"measurementId\": \"";
+  payload += escapeJsonString(identity.measurementId);
+  payload += "\",\n";
+
+  payload += "  \"sampledAtUptimeMs\": ";
+  payload += identity.sampledAtUptimeMs;
+  payload += ",\n";
 
   payload += "  \"tdsRaw\": ";
   payload += data.tdsRaw;
@@ -54,6 +74,18 @@ String buildStatusPayload(const SensorData& data) {
 
   payload += "  \"tdsMax\": ";
   payload += data.tdsMax;
+  payload += ",\n";
+
+  payload += "  \"tdsSampleCount\": ";
+  payload += data.tdsSampleCount;
+  payload += ",\n";
+
+  payload += "  \"tdsSpreadRaw\": ";
+  payload += data.tdsSpreadRaw;
+  payload += ",\n";
+
+  payload += "  \"tdsWindowStable\": ";
+  payload += boolText(data.tdsWindowStable);
   payload += ",\n";
 
   payload += "  \"waterTemp\": ";
@@ -91,7 +123,7 @@ String buildStatusPayload(const SensorData& data) {
   payload += "  \"ph\": null,\n";
 
   payload += "  \"uptimeMs\": ";
-  payload += millis();
+  payload += identity.sampledAtUptimeMs;
   payload += "\n";
   payload += "}";
 
@@ -179,6 +211,22 @@ String buildPumpStatusPayload(
   return payload;
 }
 
-void printStatusPayload(const SensorData& data) {
-  Serial.println(buildStatusPayload(data));
+void printSensorStatus(const SensorData& data) {
+  Serial.print("TDS raw: ");
+  Serial.print(data.tdsRaw);
+  Serial.print(" | voltage: ");
+  Serial.print(data.tdsVoltage, 3);
+  Serial.print(" V | samples: ");
+  Serial.print(data.tdsSampleCount);
+  Serial.print(" | spread: ");
+  Serial.print(data.tdsSpreadRaw);
+  Serial.print(" | water temp: ");
+  if (data.waterTempValid) {
+    Serial.print(data.waterTemp, 2);
+    Serial.print(" C");
+  } else {
+    Serial.print("invalid");
+  }
+  Serial.print(" | water level: ");
+  Serial.println(data.waterLevel);
 }

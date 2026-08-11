@@ -4,6 +4,7 @@
 #include <Arduino.h>
 
 #define DEVICE_ID "device001"
+const uint8_t TELEMETRY_SCHEMA_VERSION = 2;
 
 const unsigned long SERIAL_BAUDRATE = 115200;
 
@@ -20,6 +21,12 @@ const unsigned long SERIAL_BAUDRATE = 115200;
 
 // Sensor configuration.
 const int TDS_SAMPLE_COUNT = 30;
+const unsigned long TDS_SAMPLE_INTERVAL_MS = 40;
+const int TDS_WINDOW_MAX_SPREAD_RAW = 50;
+const float WATER_TEMP_MIN_C = 0.0;
+const float WATER_TEMP_MAX_C = 50.0;
+const unsigned long DS18B20_READ_INTERVAL_MS = 2000;
+const unsigned long DS18B20_CONVERSION_MS = 750;
 const bool WATER_LEVEL_LOW_WHEN_GPIO_LOW = true;
 
 // MOSFET module configuration.
@@ -39,6 +46,7 @@ const unsigned long DEFAULT_PULSE_MS = 5000;
 // MQTT timing and client identity.
 const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
 const unsigned long MQTT_PUBLISH_INTERVAL_MS = 30000;
+const uint16_t MQTT_PACKET_BUFFER_SIZE = 1024;
 #define MQTT_CLIENT_ID "hydroponic_device001"
 
 // Safe MQTT/API pump pulse limits.

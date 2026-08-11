@@ -37,6 +37,10 @@ function validateAutoDosingSettings(deviceId, body) {
   const responseEstimatePpmPerMl = parsePositiveNumber(payload.responseEstimatePpmPerMl);
   const responseEstimateWorkingLevelLiters = parsePositiveNumber(payload.responseEstimateWorkingLevelLiters);
   const requireMainPumpOn = payload.requireMainPumpOn;
+  const cropCode = payload.cropCode === undefined ? 'cai_ngot' : payload.cropCode;
+  const targetRangeConfirmed = payload.targetRangeConfirmed === undefined
+    ? false
+    : payload.targetRangeConfirmed;
 
   if (normalizedDeviceId.length === 0) {
     errors.push('deviceId route parameter is required');
@@ -66,6 +70,8 @@ function validateAutoDosingSettings(deviceId, body) {
 
   if (mixingDelayMs === null) {
     errors.push('mixingDelayMs must be a positive number');
+  } else if (mixingDelayMs < 60000) {
+    errors.push('mixingDelayMs must be at least 60000 ms');
   }
 
   if (maxDoseMlPerPumpPerRun === null) {
@@ -82,6 +88,14 @@ function validateAutoDosingSettings(deviceId, body) {
 
   if (typeof requireMainPumpOn !== 'boolean') {
     errors.push('requireMainPumpOn must be boolean');
+  }
+
+  if (cropCode !== 'cai_ngot') {
+    errors.push('cropCode must be cai_ngot');
+  }
+
+  if (typeof targetRangeConfirmed !== 'boolean') {
+    errors.push('targetRangeConfirmed must be boolean');
   }
 
   if (responseEstimatePpmPerMl === null) {
@@ -108,6 +122,14 @@ function validateAutoDosingSettings(deviceId, body) {
     errors.push('stepDoseMlPerPump must be less than or equal to maxDailyDoseMlPerPump');
   }
 
+  if (
+    maxDoseMlPerPumpPerRun !== null
+    && maxDailyDoseMlPerPump !== null
+    && maxDoseMlPerPumpPerRun > maxDailyDoseMlPerPump
+  ) {
+    errors.push('maxDoseMlPerPumpPerRun must be less than or equal to maxDailyDoseMlPerPump');
+  }
+
   return {
     ok: errors.length === 0,
     value: {
@@ -125,6 +147,8 @@ function validateAutoDosingSettings(deviceId, body) {
       requireMainPumpOn,
       responseEstimatePpmPerMl,
       responseEstimateWorkingLevelLiters,
+      cropCode: 'cai_ngot',
+      targetRangeConfirmed,
     },
     errors,
   };

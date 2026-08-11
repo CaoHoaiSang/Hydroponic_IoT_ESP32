@@ -1,11 +1,7 @@
 const mqtt = require('mqtt');
 
-const {
-  evaluateAutoDosing,
-  handlePumpStatusForAutoDosing,
-} = require('./services/autoDosingService');
 const { savePumpStatusPayload } = require('./services/pumpLogService');
-const { saveSensorPayload } = require('./services/sensorLogService');
+const { processTelemetryPayload } = require('./services/telemetryPipelineService');
 
 let mqttClient = null;
 
@@ -70,21 +66,10 @@ function connectMqtt() {
       let result;
 
       if (topic === sensorTopic) {
-        result = await saveSensorPayload(payload, topic);
-
-        if (result.ok) {
-          console.log(`Sensor payload saved, insertedId: ${result.insertedId}`);
-          const dosingResult = await evaluateAutoDosing(payload, publishPumpCommand);
-
-          if (dosingResult.action === 'started') {
-            console.log(`Auto dosing run started: ${dosingResult.runId}`);
-          } else if (dosingResult.action === 'completed') {
-            console.log(`Auto dosing run completed after mixing: ${dosingResult.runId}`);
-          } else if (dosingResult.action === 'skipped') {
-            console.log(`Auto dosing skipped: ${dosingResult.reason}`);
-          } else if (dosingResult.action === 'failed') {
-            console.warn(`Auto dosing failed: ${dosingResult.reason}`);
-          }
+        result = await processTelemetryPayload(payload, topic);
+        if (result.telemetry.ok) {
+          console.log(`Telemetry ${result.telemetry.reason}: ${payload.measurementId || 'legacy'}`);
+          if (result.shadow.saved) console.log(`Shadow decision saved: ${result.shadow.data.decision}`);
         }
 
         return;
@@ -95,14 +80,6 @@ function connectMqtt() {
 
         if (result.ok) {
           console.log(`Pump status saved, insertedId: ${result.insertedId}`);
-          const dosingResult = await handlePumpStatusForAutoDosing(payload, publishPumpCommand);
-
-          if (dosingResult.matched) {
-            console.log(`Auto dosing run updated: ${dosingResult.action} (${dosingResult.runId})`);
-            if (dosingResult.action === 'mixing_wait_started') {
-              console.log(`Auto dosing mixing wait until: ${dosingResult.mixingUntil}`);
-            }
-          }
         }
 
         return;

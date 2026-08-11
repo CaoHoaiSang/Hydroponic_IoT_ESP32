@@ -1,61 +1,72 @@
-# Database Schema - Hydroponic_IoT_ESP32
+# Database Schema - Phase 22A Fix 1
 
-MongoDB Atlas will store long-term data for the core phase.
+## `devices`
 
-## 1. devices
+Unique key: `deviceId`.
 
-| Field | Purpose |
-|---|---|
-| deviceId | Unique device identifier, such as device001 |
-| name | Human-readable device name |
-| status | Device status, such as online, offline, or maintenance |
-| lastSeenAt | Last time the backend received data from the device |
+Important fields: `deviceId`, `status`, `lastSeenAt`, `activeTdsCalibrationSetId`,
+`latestCalibration`, `latest`, `createdAt`, and `updatedAt`.
 
-## 2. sensor_logs
+`telemetrySession` stores the accepted boot, latest accepted sequence/measurement,
+one unconfirmed boot candidate, the retired-boot list, and a CAS revision.
 
-| Field | Purpose |
-|---|---|
-| deviceId | Device identifier |
-| tdsRaw | Raw ADC reading from TDS sensor |
-| tdsPpm | Estimated TDS value in ppm |
-| waterTemp | Water temperature in Celsius |
-| waterLevel | Water level enum: normal, low, or error |
-| pumpMain | Current main pump state |
-| pumpA | Current pump A state |
-| pumpB | Current pump B state |
-| ph | Reserved for later; null in current phase |
-| createdAt | Timestamp for the reading |
+`latest.receivedAt` is the server receipt time. `latest.measurementAt` is derived from a
+same-boot uptime anchor and is accompanied by `measurementFreshnessVerified`,
+`measurementTimeSource`, and `measurementAgeAtReceiptMs`. Receive time alone never proves
+freshness. The first row without an anchor is fail-closed for control.
+`latest` contains the complete EC/TDS measurement quality contract documented in
+`Payload_Format.md`, plus water level, temperature, pump state, pH placeholder, and uptime.
 
-## 3. pump_logs
+## `tds_calibration_sets`
 
-| Field | Purpose |
-|---|---|
-| deviceId | Device identifier |
-| pumpType | Pump enum: main, A, B, or spare |
-| action | Pump action: on, off, or pulse |
-| durationMs | Duration for pulse commands |
-| estimatedMl | Estimated volume for calibrated pumps |
-| reason | Reason enum, such as manual_test or calibration |
-| createdAt | Timestamp for the pump event |
+Fields: `setId`, `deviceId`, `status` (`draft|active|retired`),
+`method=piecewise_linear_ec`, `referenceScale=500`, `tdsFactor=0.5`,
+`temperatureReferenceC=25`, `temperatureAlphaPerC=0.02`, point count, validation
+status/errors/warnings, voltage/EC/TDS ranges, meter, note, lifecycle history, `activeLock`
+for the current active set, and timestamps.
 
-## 4. alerts
+Indexes: unique `setId`; `{deviceId, status, createdAt}`; unique partial
+`{deviceId, activeLock}` where `activeLock=true`.
 
-| Field | Purpose |
-|---|---|
-| deviceId | Device identifier |
-| type | Alert type |
-| level | Alert severity |
-| message | Human-readable alert message |
-| createdAt | Timestamp for the alert |
-| resolved | Whether the alert has been resolved |
+## `tds_calibrations`
 
-## Optional Later: 5. pump_calibrations
+New points contain `calibrationSetId`, `deviceId`, raw/voltage/voltage25, reference EC,
+derived scale-500 TDS, temperature compensation fields, method, note, and creation time.
+Legacy rows may omit these fields and are never selected for control.
 
-| Field | Purpose |
-|---|---|
-| deviceId | Device identifier |
-| pumpType | Pump enum: A or B |
-| testDurationSec | Calibration test duration in seconds |
-| measuredMl | Measured output volume in ml |
-| flowRateMlPerSec | Calculated pump flow rate |
-| createdAt | Timestamp for the calibration record |
+Index: `{deviceId, calibrationSetId, measuredVoltage25}`. It is intentionally non-unique
+for compatibility; service validation rejects duplicates before activation.
+
+## Measurements And Operation
+
+- `sensor_logs`: sensor history with firmware identity, order classification, explicit
+  `receivedAt`/`measurementAt`, and the complete quality contract. Only accepted V2
+  measurements can update latest or stability. Duplicate receipts update audit metadata
+  on the original row instead of creating a second row. Fix 1 adds a recoverable
+  `processingState` lifecycle (`PROCESSING|FAILED|COMPLETED`) and a 30-second lease so a
+  processing failure does not permanently trap the measurement as a duplicate.
+- `pump_logs`: MQTT pump command/status history.
+- `pump_calibrations`: measured Pump A/B flow rates.
+- `auto_dosing_settings`: disabled-by-default settings, `cropCode=cai_ngot`, and
+  `targetRangeConfirmed=false` until explicit operator confirmation.
+- `dosing_runs`: Pump A -> Pump B -> mixing-wait workflow and outcomes. New active runs
+  carry `activeLock=true` and `tdsCalibrationSetIdAtStart`; completion/failure removes the lock.
+  A unique partial `{deviceId, activeLock}` index prevents two new active runs per device.
+- `auto_dosing_events`: throttled safety/evaluation audit history.
+- `alerts`: active/resolved hardware and data-quality alerts.
+- `nutrient_response_tests`: supervised prototype response records.
+- `shadow_dosing_decisions`: one side-effect-free Shadow result per accepted V2
+  measurement, including engine/schema versions, 30 gates, stable reason codes,
+  hypothetical action, and optional hypothetical values.
+
+## Phase 22A Indexes
+
+```javascript
+{ deviceId: 1, measurementId: 1 } // unique, partial: schemaVersion=2 and telemetryIdentityValid=true
+{ deviceId: 1, bootId: 1, telemetryOrderStatus: 1, receivedAt: -1 }
+{ deviceId: 1, measurementId: 1 } // unique on shadow_dosing_decisions
+{ deviceId: 1, createdAt: -1 }    // shadow history
+```
+
+No data migration is required. Legacy rows are not assigned synthetic identity and are
+not made control-eligible.
