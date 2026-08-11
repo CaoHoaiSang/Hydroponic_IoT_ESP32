@@ -2,13 +2,13 @@
 
 ## 1. Last Updated
 
-- Date: 2026-08-10
+- Date: 2026-08-11
 - Updated by: Codex
 
 ## 2. Current Project Phase
 
-- Current phase: Phase 22B Stage 1 Preflight
-- Short description: Authenticated MQTT is bound only to loopback and the private LAN IPv4, firmware/backend topics match the `stage1/` namespace, and the USB Stage 1 firmware profile has a compile-tested actuator lock. Runtime staging passed with Auto Dosing OFF, zero pump command, and zero dosing run. Physical ESP32 networking remains unverified because staging Wi-Fi credentials were not configured and firmware was not uploaded.
+- Current phase: Source Consolidation and Workspace Cleanup
+- Short description: Accepted Phase 22A Fix 2, Phase 22B Stage 0, and Phase 22B Stage 1 Preflight changes are consolidated in the sole source-of-record repository. Checkpoint commits/tags, provenance manifests, regression evidence, firmware build evidence, and retained reports are in Git. Redundant compare/re-audit/build/baseline/patch trees were removed through the Recycle Bin. Physical USB Stage 1 remains paused and unverified.
 
 ## 3. Completed Tasks
 
@@ -44,6 +44,7 @@
 | 28 | Phase 22A Fix 2 independent re-audit | Done | Expired `PROCESSING` lease claim is now atomic by state, lease, and attempt. Full suite: 173 passed, 0 failed, 0 skipped. Full Arduino compile passed; no upload. |
 | 29 | Phase 22B Stage 0 isolated staging | Done | Real isolated MongoDB/MQTT/backend/Dashboard runtime PASS on ports 27018/18884/3100. Stop/reset/start repeatability PASS; Auto Dosing OFF, zero pump command, zero dosing run. |
 | 30 | Phase 22B Stage 1 Preflight | Partial | LAN MQTT/auth/ACL, topic parity, actuator lock, lifecycle, runtime integration, regression, and full profile compile passed. Physical Wi-Fi path is not configured or tested; no firmware upload or hardware use occurred. |
+| 31 | Source Consolidation and Workspace Cleanup | Done | Main Git history preserved; accepted changes merged by verified diff; 181 tests and 47 syntax checks passed; Stage 1 firmware profile compiled; six redundant trees and generated artifacts were removed. |
 
 ## 4. Created Folders
 
@@ -123,6 +124,12 @@ Phase 22B Stage 0 created:
 - `03_Edge_Server/mqtt_backend/staging/README.md`
 - `03_Edge_Server/mqtt_backend/test/stage0Safety.test.js`
 - `CODEX_PHASE22B_STAGE0_REPORT.md`
+
+Source Consolidation created:
+
+- `00_Docs/Phase_Reports/`
+- `00_Docs/Patches/`
+- `00_Docs/Manifests/`
 
 ## 6. Modified Files
 
@@ -226,6 +233,14 @@ Phase 22B Stage 0 modified:
 - `03_Edge_Server/mqtt_backend/src/httpServer.js`: supports an optional bind host so Stage 0 is loopback-only.
 - `03_Edge_Server/mqtt_backend/src/mqttClient.js`: adds environment pump-publisher lock.
 - `03_Edge_Server/mqtt_backend/src/services/pumpCommandService.js`: rejects manual pump service paths when staging lock is enabled.
+
+Source Consolidation added or updated:
+
+- `.gitignore`: consolidated credential, dependency, runtime, build, cache, log, binary, and archive exclusions.
+- `00_Docs/Phase_Reports/`: retained accepted audit and phase reports.
+- `00_Docs/Patches/`: retained the secret-safe Stage 1 patch.
+- `00_Docs/Manifests/`: retained pre-cleanup inventory, transfer hashes, checkpoint hashes, parity, provenance, and post-cleanup verification.
+- `00_Docs/PROJECT_STATUS_REPORT.md`: records the sole source-of-record state and cleanup result.
 
 ## 7. Hardware Pin Map Confirmed
 
@@ -408,12 +423,15 @@ Example verified safety event:
 - No Device Enrollment, AI Model OTA, Zalo OA, or AI Camera.
 - Stage 0 is loopback-only and intentionally anonymous; it is not a production security configuration.
 - `npm audit` still reports indirect `body-parser` (low) and `ip-address` (high) findings; no dependency was automatically upgraded in Stage 0.
+- Physical USB Stage 1 remains unverified: no staging Wi-Fi credential was configured, no firmware was uploaded, and no ESP32 or hardware was connected during consolidation.
+- `D:\Hydroponic_IoT_ESP32.rar` was not deleted because it was not one of the exact authorized cleanup targets and was not used as source.
+- Four Phase 21/22 artifacts remain under `D:\Download` because that directory is outside the authorized project cleanup scope; retained in-source copies have matching hashes where applicable.
 
 ## 12. Next Recommended Direction
 
-"Proceed to USB Stage 1 using the verified isolated Stage 0 stack. Keep Auto Dosing OFF,
-nutrient bottles disconnected, and pump power removed. Connect only a staging ESP32 and
-verify real USB/telemetry identity behavior before any supervised hardware-control work."
+"Review `00_Docs/Phase_Reports/CODEX_SOURCE_CONSOLIDATION_REPORT.md`, then resume the
+supervised Physical USB Stage 1 procedure from the consolidated source. Keep Auto Dosing OFF,
+nutrient bottles disconnected, and pump power removed."
 
 Do not connect nutrient bottles or enable Auto Dosing during this validation.
 

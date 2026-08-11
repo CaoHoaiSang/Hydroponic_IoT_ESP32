@@ -1,0 +1,57 @@
+Hydroponic_IoT_ESP32 post-cleanup verification
+Date: 2026-08-11
+
+Source of record:
+D:\Hydroponic_IoT_ESP32
+
+Authorized redundant directory existence after cleanup:
+D:\Hydroponic_IoT_ESP32_PHASE22A_FIX1_ORIGINAL_COMPARE = false
+D:\Hydroponic_IoT_ESP32_PHASE22A_FIX1_REAUDIT = false
+D:\Hydroponic_PHASE22A_FIX2_BUILD_20260810 = false
+D:\Hydroponic_PHASE22B_STAGE1_BUILD_20260810 = false
+D:\Hydroponic_STAGE1_PATCH_REPO = false
+D:\Hydroponic_STAGE1_PREFLIGHT_BASELINE = false
+
+Main-tree hygiene:
+node_modules = absent
+.stage0_runtime = absent
+.stage1_runtime = absent
+.env = absent
+Secrets.h = absent
+SecretsStage1.h = absent
+build/cache/log/temp/archive output = absent
+untracked files = 0
+ignored generated files = 0
+
+Post-cleanup smoke evidence:
+npm ci --ignore-scripts = exit 0; temporary node_modules removed afterward
+npm test = 181 passed, 0 failed, 0 skipped; exit 0
+node --check = 47 passed, 0 failed; exit 0
+Telemetry Identity native host harness build/run = exit 0 / exit 0
+USB Stage 1 actuator-lock native harness build/run = exit 0 / exit 0
+package.json parse = PASS
+04_Database/sample_payload.json parse = PASS
+git diff --check = exit 0
+git fsck --no-dangling = exit 0
+
+Staging shutdown state:
+listeners on 18884, 18885, 27018, 27019, 3100, 3101 = 0
+scoped firewall rule "Hydroponic Phase22B Stage1 MQTT" = absent
+pre-existing generic "Mosquitto MQTT" rule for port 1883 = present and intentionally untouched
+Auto Dosing = OFF in verified staging evidence
+pump command delivered = 0
+dosing run created = 0
+pump log created = 0
+
+Checkpoint tags:
+phase22a-fix2-pass -> 739c1f7f9eeabf244060db320dcd569d3ba12997
+phase22b-stage0-pass -> 2141c050f1ad969d2ffc2802d25a65b200adf4ec
+phase22b-stage1-preflight-partial -> c02e821ffda27f58352e465eb8d650c62f8d9e60
+source-consolidation-precleanup -> f0e337068a0084669cf2e5252228eb82e19a88e6
+
+Items intentionally not removed:
+D:\Hydroponic_IoT_ESP32.rar - outside the exact authorized cleanup target list; not a working tree.
+D:\Download\CODEX_PHASE22A_FIX2_FINAL_REPORT.md - outside project cleanup scope.
+D:\Download\Hydroponic_IoT_ESP32_PHASE22A_FIX2_REVIEW.zip - outside project cleanup scope.
+D:\Download\PHASE21_FIX1_REAUDIT_AND_CLEANUP_PLAN.md - outside project cleanup scope.
+D:\Download\PHASE21_INDEPENDENT_AUDIT.md - outside project cleanup scope.
