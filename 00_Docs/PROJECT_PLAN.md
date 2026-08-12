@@ -2,7 +2,7 @@
 
 ## A. Project Objective
 
-Hydroponic_IoT_ESP32 is a smart hydroponic system for Green Oakleaf lettuce / xà lách sồi xanh 932.
+Hydroponic_IoT_ESP32 is a smart hydroponic system whose current demo crop is cải ngọt.
 
 The current phase focuses on sensor reading, pump control, MQTT data transmission, and database logging.
 
@@ -51,6 +51,11 @@ The current phase focuses on sensor reading, pump control, MQTT data transmissio
 | Phase 13 | MongoDB Atlas logging |
 | Phase 14 | Manual pump command from API/dashboard |
 | Phase 15 | Basic alerts |
+| Phase 16-20D | MQTT pump control, calibration, Auto Dosing prototype, monitoring, and documentation |
+| Phase 21 | EC-first calibration sets and fail-closed Auto Dosing safety hardening |
+| Phase 21 Fix Round 1 | Close audit findings for measurement validity, post-mixing freshness, idempotency, lifecycle atomicity, migration classification, and documentation |
+| Phase 21 Fix Round 2 | Consolidate historical documentation, harden migration completeness auditing, and produce a secret-safe review package |
+| Phase 22A | Compile firmware, add Telemetry Identity V2, enforce duplicate/order/boot-session safety, and add side-effect-free Shadow Mode observation |
 
 ## D. Definition Of Done For Core Phase
 

@@ -3,7 +3,10 @@
 
 #include <Arduino.h>
 
+#include "BuildProfile.h"
+
 #define DEVICE_ID "device001"
+const uint8_t TELEMETRY_SCHEMA_VERSION = 2;
 
 const unsigned long SERIAL_BAUDRATE = 115200;
 
@@ -20,6 +23,12 @@ const unsigned long SERIAL_BAUDRATE = 115200;
 
 // Sensor configuration.
 const int TDS_SAMPLE_COUNT = 30;
+const unsigned long TDS_SAMPLE_INTERVAL_MS = 40;
+const int TDS_WINDOW_MAX_SPREAD_RAW = 50;
+const float WATER_TEMP_MIN_C = 0.0;
+const float WATER_TEMP_MAX_C = 50.0;
+const unsigned long DS18B20_READ_INTERVAL_MS = 2000;
+const unsigned long DS18B20_CONVERSION_MS = 750;
 const bool WATER_LEVEL_LOW_WHEN_GPIO_LOW = true;
 
 // MOSFET module configuration.
@@ -30,17 +39,26 @@ const unsigned long STATUS_PRINT_INTERVAL_MS = 30000;
 const unsigned long SENSOR_READ_INTERVAL_MS = 2000;
 const unsigned long DEFAULT_PULSE_MS = 5000;
 
-// MQTT topics for device001.
+// MQTT topics are isolated by build profile. Operational topics remain unchanged.
+#if HYDROPONIC_BUILD_PROFILE == HYDROPONIC_PROFILE_USB_STAGE1
+#define MQTT_TOPIC_SENSOR "stage1/hydroponic/device001/sensor"
+#define MQTT_TOPIC_PUMP_CMD "stage1/hydroponic/device001/pump/cmd"
+#define MQTT_TOPIC_PUMP_STATUS "stage1/hydroponic/device001/pump/status"
+// Reserved identity only. USB Stage 1 neither publishes nor subscribes to alerts.
+#define MQTT_TOPIC_ALERT "stage1/hydroponic/device001/alert"
+#define MQTT_CLIENT_ID "hydroponic_device001_stage1"
+#else
 #define MQTT_TOPIC_SENSOR "hydroponic/device001/sensor"
 #define MQTT_TOPIC_PUMP_CMD "hydroponic/device001/pump/cmd"
 #define MQTT_TOPIC_PUMP_STATUS "hydroponic/device001/pump/status"
 #define MQTT_TOPIC_ALERT "hydroponic/device001/alert"
+#define MQTT_CLIENT_ID "hydroponic_device001"
+#endif
 
 // MQTT timing and client identity.
 const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
 const unsigned long MQTT_PUBLISH_INTERVAL_MS = 30000;
-#define MQTT_CLIENT_ID "hydroponic_device001"
-
+const uint16_t MQTT_PACKET_BUFFER_SIZE = 1024;
 // Safe MQTT/API pump pulse limits.
 const unsigned long MQTT_PUMP_MAIN_MAX_DURATION_MS = 10000;
 const unsigned long MQTT_PUMP_A_MAX_DURATION_MS = 5000;

@@ -1,3 +1,10 @@
+# HISTORICAL SNAPSHOT — DO NOT USE FOR CURRENT PHASE 21 SAFETY LOGIC.
+
+Any `NOT TESTED` status in this snapshot reflects the time when this package was
+created. Newer historical Phase 20B/20C runtime results are recorded in the Phase
+20D review package and `00_Docs/PROJECT_STATUS_REPORT.md`. This file is not Phase
+21 runtime evidence and its older safety logic must not be used for current control.
+
 # PHASE 20B REVIEW PACKAGE
 
 ## 1. Implementation Summary

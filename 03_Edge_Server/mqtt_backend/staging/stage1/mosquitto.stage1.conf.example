@@ -1,0 +1,7 @@
+# The start script replaces placeholders in a Git-ignored runtime file.
+per_listener_settings false
+allow_anonymous false
+password_file RUNTIME_PASSWORD_FILE
+acl_file RUNTIME_ACL_FILE
+listener 18885 127.0.0.1
+listener 18885 PRIVATE_LAN_IPV4

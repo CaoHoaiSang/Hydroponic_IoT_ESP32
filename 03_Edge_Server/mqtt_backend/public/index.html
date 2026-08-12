@@ -71,7 +71,7 @@
         </div>
       </section>
 
-      <section class="section-block" aria-labelledby="tdsCalibrationTitle">
+      <section class="section-block" aria-labelledby="tdsCalibrationTitle" hidden>
         <div class="section-heading">
           <h2 id="tdsCalibrationTitle">TDS Calibration</h2>
           <span id="tdsCalibrationStatus" class="meta-text">Latest TDS calibration</span>
@@ -122,7 +122,7 @@
                 <strong id="currentTdsTempComp" class="metric-value">N/A</strong>
               </article>
               <article class="metric-card">
-                <span class="metric-label">Temperature coefficient</span>
+                <span class="metric-label">Temperature alpha</span>
                 <strong id="currentTdsTempCoeff" class="metric-value">N/A</strong>
               </article>
               <article class="metric-card">
@@ -197,6 +197,134 @@
             </table>
           </div>
           <p id="tdsCalibrationHistoryStatus" class="meta-text calibration-history-status">Latest 10 rows</p>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="ecTdsCalibrationTitle">
+        <div class="section-heading">
+          <h2 id="ecTdsCalibrationTitle">EC/TDS Calibration Sets</h2>
+          <span id="ecTdsCalibrationStatus" class="meta-text">EC-first, scale 500</span>
+        </div>
+        <div class="warning-panel">
+          Calibration requires at least three distinct EC references. Legacy points are view-only.
+          Auto Dosing stays blocked until an active set and stable control measurement are available.
+        </div>
+        <div class="card-grid calibration-quality-grid">
+          <article class="metric-card"><span class="metric-label">Raw voltage</span><strong id="qualityTdsRawVoltage" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Voltage @25 C</span><strong id="qualityTdsVoltage25" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">EC</span><strong id="qualityEcValue" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">TDS scale 500</span><strong id="qualityTdsPpm" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Temperature alpha</span><strong id="qualityTempAlpha" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Actual temperature factor</span><strong id="qualityTempFactor" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Firmware window stable</span><strong id="qualityWindowStable" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Backend stable</span><strong id="qualityBackendStable" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Spread / threshold</span><strong id="qualityStabilitySpread" class="metric-value compact-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Control valid</span><strong id="qualityControlValid" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Warning</span><strong id="qualityCalibrationWarning" class="metric-value compact-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Invalid reasons</span><strong id="qualityControlReasons" class="metric-value compact-value">N/A</strong></article>
+        </div>
+        <div class="calibration-layout ec-calibration-layout">
+          <form id="tdsSetCreateForm" class="calibration-form">
+            <h3 class="panel-title">Create Draft Set</h3>
+            <label for="tdsReferenceMeterInput">Reference meter</label>
+            <input id="tdsReferenceMeterInput" type="text" maxlength="120" placeholder="Meter model or identifier">
+            <label for="tdsSetNoteInput">Set note</label>
+            <input id="tdsSetNoteInput" type="text" maxlength="160" placeholder="Calibration session note">
+            <button id="createTdsSetButton" type="submit">Create Draft Set</button>
+          </form>
+          <div class="calibration-form">
+            <h3 class="panel-title">Selected Set</h3>
+            <label for="tdsSetSelect">Calibration set</label>
+            <select id="tdsSetSelect"><option value="">Select a set explicitly</option></select>
+            <p id="selectedTdsSetSummary" class="meta-text">No set selected</p>
+            <div class="calibration-button-row">
+              <button id="validateTdsSetButton" class="secondary-button" type="button">Validate</button>
+              <button id="activateTdsSetButton" type="button">Activate</button>
+              <button id="retireTdsSetButton" class="danger-button" type="button">Retire</button>
+            </div>
+          </div>
+          <form id="tdsPointForm" class="calibration-form">
+            <h3 class="panel-title">Add EC Reference Point</h3>
+            <label for="ecTdsMeasuredRawInput">Measured raw ADC</label>
+            <input id="ecTdsMeasuredRawInput" type="number" min="1" max="4095" step="1">
+            <label for="ecTdsMeasuredVoltageInput">Measured voltage</label>
+            <input id="ecTdsMeasuredVoltageInput" type="number" min="0.001" max="2.3" step="0.001">
+            <label for="ecTdsWaterTempInput">Water temperature C</label>
+            <input id="ecTdsWaterTempInput" type="number" min="0" max="50" step="0.01">
+            <label for="tdsReferenceEcInput">Reference EC (uS/cm)</label>
+            <input id="tdsReferenceEcInput" type="number" min="0.1" max="2000" step="0.1">
+            <label for="tdsDerivedPpmOutput">Derived TDS, scale 500</label>
+            <output id="tdsDerivedPpmOutput">N/A</output>
+            <label for="ecTdsPointNoteInput">Point note</label>
+            <input id="ecTdsPointNoteInput" type="text" maxlength="120">
+            <div class="calibration-button-row">
+              <button id="ecUseLatestTdsButton" class="secondary-button" type="button">Use Latest Sensor Values</button>
+              <button id="addTdsPointButton" type="submit">Add Point</button>
+            </div>
+          </form>
+        </div>
+        <div class="active-set-band"><h3 class="panel-title">Active Set</h3><p id="activeTdsSetSummary">No active calibration set</p></div>
+        <div class="table-wrap calibration-history-wrap">
+          <table><thead><tr><th>Set ID</th><th>Status</th><th>Points</th><th>Validation</th><th>Voltage25 range</th><th>EC range</th><th>Created</th></tr></thead>
+            <tbody id="tdsCalibrationSetsBody"><tr><td colspan="7">Loading calibration sets...</td></tr></tbody></table>
+        </div>
+        <div class="table-wrap calibration-history-wrap">
+          <table><thead><tr><th>Time</th><th>Raw</th><th>Voltage</th><th>Voltage @25 C</th><th>Reference EC</th><th>TDS 500</th><th>Water Temp</th><th>Note</th></tr></thead>
+            <tbody id="tdsSetPointsBody"><tr><td colspan="8">Select a calibration set</td></tr></tbody></table>
+        </div>
+        <h3 class="panel-title legacy-heading">Legacy - not active</h3>
+        <div class="table-wrap calibration-history-wrap">
+          <table><thead><tr><th>Time</th><th>Raw</th><th>Voltage</th><th>Legacy ppm</th><th>Water Temp</th><th>Note</th></tr></thead>
+            <tbody id="legacyTdsCalibrationBody"><tr><td colspan="6">Loading legacy history...</td></tr></tbody></table>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="telemetryShadowTitle">
+        <div class="section-heading">
+          <h2 id="telemetryShadowTitle">Telemetry Identity V2 &amp; Shadow Mode</h2>
+          <span id="shadowSectionStatus" class="meta-text">Observation only - no pump control</span>
+        </div>
+        <div class="warning-panel">
+          Auto Dosing is locked OFF in Phase 22A. Shadow Mode records hypothetical decisions only;
+          it cannot publish pump commands or create dosing runs.
+        </div>
+        <div class="card-grid telemetry-grid">
+          <article class="metric-card"><span class="metric-label">Auto Dosing</span><strong id="phase22AutoDosingValue" class="metric-value">OFF</strong></article>
+          <article class="metric-card"><span class="metric-label">Shadow Mode</span><strong id="shadowModeValue" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Schema</span><strong id="telemetrySchemaValue" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Order status</span><strong id="telemetryOrderValue" class="metric-value compact-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Measurement ID</span><strong id="telemetryMeasurementIdValue" class="metric-value compact-value identity-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Boot ID</span><strong id="telemetryBootIdValue" class="metric-value compact-value identity-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Sequence</span><strong id="telemetrySeqValue" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Sample uptime</span><strong id="telemetrySampledUptimeValue" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Identity valid</span><strong id="telemetryIdentityValue" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Duplicate</span><strong id="telemetryDuplicateValue" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Control eligible</span><strong id="telemetryControlValue" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Raw / voltage</span><strong id="telemetryRawValue" class="metric-value compact-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">EC calibrated</span><strong id="telemetryEcValue" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">TDS scale 500</span><strong id="telemetryPpmValue" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Active set</span><strong id="telemetrySetValue" class="metric-value compact-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Firmware samples</span><strong id="telemetrySampleCountValue" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Distinct backend measurements</span><strong id="telemetryDistinctCountValue" class="metric-value">N/A</strong></article>
+          <article class="metric-card"><span class="metric-label">Backend stable</span><strong id="telemetryStableValue" class="metric-value">N/A</strong></article>
+        </div>
+        <p id="telemetryLegacyStatus" class="meta-text">Waiting for telemetry identity.</p>
+        <div class="shadow-summary-band">
+          <div><span>Decision</span><strong id="shadowDecisionValue">N/A</strong></div>
+          <div><span>Primary reason</span><strong id="shadowPrimaryReasonValue">N/A</strong></div>
+          <div><span>Hypothetical action</span><strong id="shadowActionValue">N/A</strong></div>
+          <div><span>Hypothetical dose/time</span><strong id="shadowDoseValue">N/A</strong></div>
+          <div><span>Decision time</span><strong id="shadowDecisionTimeValue">N/A</strong></div>
+        </div>
+        <p><strong>Reason codes:</strong> <span id="shadowReasonsValue">N/A</span></p>
+        <div class="table-wrap">
+          <table class="shadow-table"><thead><tr><th>Safety gate</th><th>Status</th><th>Reason</th><th>Detail</th></tr></thead>
+            <tbody id="shadowGatesBody"><tr><td colspan="4">No Shadow decision yet</td></tr></tbody></table>
+        </div>
+        <h3 class="panel-title shadow-history-heading">Latest Shadow decisions</h3>
+        <div class="table-wrap">
+          <table><thead><tr><th>Time</th><th>Measurement</th><th>Decision</th><th>Primary reason</th><th>Action</th><th>Dose / A / B</th></tr></thead>
+            <tbody id="shadowDecisionsBody"><tr><td colspan="6">Loading Shadow history...</td></tr></tbody></table>
         </div>
       </section>
 
@@ -544,23 +672,34 @@
 
       <section class="section-block" aria-labelledby="autoDosingTitle">
         <div class="section-heading">
-          <h2 id="autoDosingTitle">Auto Dosing V2</h2>
+          <h2 id="autoDosingTitle">Auto Dosing V2 Safety & Monitoring</h2>
           <span id="autoDosingStatus" class="meta-text">Loading auto dosing...</span>
         </div>
         <div class="calibration-panel">
           <div class="warning-list">
-            <p>Auto Dosing is disabled by default.</p>
+            <p>Auto Dosing is locked OFF during Phase 22A.</p>
             <p>Test with clean water before using nutrient bottles.</p>
             <p>Closed-loop step dosing pulses Pump A, then Pump B, waits for mixing, then re-checks TDS.</p>
             <p>No large one-shot dosing. Pump A/B remain pulse-only.</p>
             <p>Main pump must be ON when Require main pump ON is enabled.</p>
+            <p>Resetting daily dose counter does not remove physical nutrient already dosed. Use only for controlled tests.</p>
           </div>
           <div class="calibration-layout">
             <form id="autoDosingSettingsForm" class="calibration-form">
               <p class="form-subheading">Mode: Closed-loop Step Dosing V2</p>
+              <div class="preset-actions">
+                <button id="autoPrototypePresetButton" class="secondary-button" type="button">Prototype Safe Test Preset</button>
+                <button id="autoRealPresetButton" class="secondary-button" type="button">Real Nutrient Conservative Preset</button>
+              </div>
               <label class="checkbox-row" for="autoDosingEnabledInput">
-                <input id="autoDosingEnabledInput" type="checkbox">
-                <span>Enabled</span>
+                <input id="autoDosingEnabledInput" type="checkbox" disabled>
+                <span>Enabled (locked OFF in Phase 22A)</span>
+              </label>
+
+              <p class="form-subheading">Crop profile: cải ngọt</p>
+              <label class="checkbox-row" for="autoTargetConfirmedInput">
+                <input id="autoTargetConfirmedInput" type="checkbox">
+                <span>I confirm this target range is verified for cải ngọt</span>
               </label>
 
               <label for="autoTargetMinInput">Target min ppm</label>
@@ -574,12 +713,13 @@
 
               <label for="autoMixingDelayMinutesInput">Mixing delay minutes</label>
               <input id="autoMixingDelayMinutesInput" type="number" min="1" step="1" value="15">
+              <p id="autoMixingDelayWarning" class="inline-warning" hidden>Short mixing delay is for testing only.</p>
 
               <label for="autoMaxDoseMlInput">Max dose ml per pump per run</label>
               <input id="autoMaxDoseMlInput" type="number" min="0.1" max="10" step="0.1" value="1">
 
               <label for="autoMaxDailyDoseMlInput">Max daily dose ml per pump</label>
-              <input id="autoMaxDailyDoseMlInput" type="number" min="0.1" max="100" step="0.1" value="10">
+              <input id="autoMaxDailyDoseMlInput" type="number" min="0.1" max="100" step="0.1" value="2">
 
               <label class="checkbox-row" for="autoRequireMainPumpOnInput">
                 <input id="autoRequireMainPumpOnInput" type="checkbox" checked>
@@ -594,61 +734,207 @@
 
               <button id="saveAutoDosingSettingsButton" type="submit">Save Settings</button>
             </form>
-            <div class="auto-dosing-latest">
-              <article class="metric-card">
-                <span class="metric-label">Mode</span>
-                <strong id="autoModeValue" class="metric-value compact-value">N/A</strong>
-              </article>
-              <article class="metric-card">
-                <span class="metric-label">Current state</span>
-                <strong id="autoDosingEnabledValue" class="metric-value">N/A</strong>
-              </article>
-              <article class="metric-card">
-                <span class="metric-label">Last evaluation reason</span>
-                <strong id="autoDosingReasonValue" class="metric-value compact-value">N/A</strong>
-              </article>
-              <article class="metric-card">
-                <span class="metric-label">Last evaluation TDS</span>
-                <strong id="autoDosingTdsValue" class="metric-value">N/A</strong>
-              </article>
-              <article class="metric-card">
-                <span class="metric-label">Active run</span>
-                <strong id="autoDosingActiveRunValue" class="metric-value compact-value">N/A</strong>
-              </article>
-              <article class="metric-card">
-                <span class="metric-label">Mixing until</span>
-                <strong id="autoMixingUntilValue" class="metric-value compact-value">N/A</strong>
-              </article>
-              <article class="metric-card">
-                <span class="metric-label">Daily dose used</span>
-                <strong id="autoDailyDoseValue" class="metric-value">N/A</strong>
-              </article>
+            <div>
+              <h3 class="panel-title">Auto Dosing Safety Summary</h3>
+              <div class="auto-dosing-latest">
+                <article class="metric-card">
+                  <span class="metric-label">Mode</span>
+                  <strong id="autoModeValue" class="metric-value compact-value">N/A</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Enabled</span>
+                  <strong id="autoDosingEnabledValue" class="metric-value">N/A</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Current state</span>
+                  <strong id="autoSafetyStateValue" class="metric-value compact-value">N/A</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Crop / target confirmation</span>
+                  <strong id="autoCropTargetValue" class="metric-value compact-value">N/A</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Readiness reasons</span>
+                  <strong id="autoReadinessReasonsValue" class="metric-value compact-value">N/A</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Current TDS</span>
+                  <strong id="autoCurrentTdsValue" class="metric-value">N/A</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Target range</span>
+                  <strong id="autoTargetRangeValue" class="metric-value compact-value">N/A</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Last evaluation reason</span>
+                  <strong id="autoDosingReasonValue" class="metric-value compact-value">N/A</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Last evaluation time</span>
+                  <strong id="autoLastEvaluationAtValue" class="metric-value compact-value">N/A</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Last evaluation TDS</span>
+                  <strong id="autoDosingTdsValue" class="metric-value">N/A</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Main pump</span>
+                  <strong id="autoMainPumpValue" class="metric-value">N/A</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Water level</span>
+                  <strong id="autoWaterLevelValue" class="metric-value">N/A</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Require main pump ON</span>
+                  <strong id="autoRequireMainPumpValue" class="metric-value">N/A</strong>
+                </article>
+                <article class="metric-card">
+                  <span class="metric-label">Pump A/B calibration</span>
+                  <strong id="autoPumpCalibrationValue" class="metric-value compact-value">N/A</strong>
+                </article>
+              </div>
             </div>
+          </div>
+
+          <div class="monitor-grid">
+            <div class="monitor-panel">
+              <h3 class="panel-title">Daily Dose Usage</h3>
+              <div class="detail-grid">
+                <span>Used per pump</span><strong id="autoDailyDoseValue">N/A</strong>
+                <span>Maximum per pump</span><strong id="autoDailyDoseMaxValue">N/A</strong>
+                <span>Remaining per pump</span><strong id="autoDailyDoseRemainingValue">N/A</strong>
+                <span>Calculation window</span><strong id="autoDailyWindowValue">N/A</strong>
+                <span>Last manual reset</span><strong id="autoDailyResetValue">N/A</strong>
+                <span>Runs counted</span><strong id="autoDailyRunsCountedValue">N/A</strong>
+              </div>
+              <div class="progress-track" aria-label="Daily dose usage">
+                <span id="autoDailyDoseProgress" class="progress-fill"></span>
+              </div>
+              <p id="autoDailyDoseProgressText" class="meta-text">0%</p>
+              <p id="autoDailyLimitWarning" class="danger-note" hidden>Daily dose limit reached. Auto Dosing cannot start another step.</p>
+              <button id="resetDailyDoseButton" class="danger-button" type="button">Reset Daily Dose Counter</button>
+            </div>
+
+            <div class="monitor-panel">
+              <h3 class="panel-title">Active Run</h3>
+              <div class="detail-grid">
+                <span>Run ID</span><strong id="autoActiveRunIdValue">None</strong>
+                <span>Status</span><strong id="autoActiveRunStatusValue">N/A</strong>
+                <span>Current step</span><strong id="autoActiveRunStepValue">N/A</strong>
+                <span>TDS start</span><strong id="autoActiveRunTdsValue">N/A</strong>
+                <span>Step dose</span><strong id="autoActiveRunDoseValue">N/A</strong>
+                <span>Pump A</span><strong id="autoActivePumpAValue">N/A</strong>
+                <span>Pump B</span><strong id="autoActivePumpBValue">N/A</strong>
+                <span>Mixing started</span><strong id="autoActiveMixingStartedValue">N/A</strong>
+                <span>Mixing until</span><strong id="autoActiveMixingUntilValue">N/A</strong>
+                <span>Countdown</span><strong id="autoActiveCountdownValue">N/A</strong>
+                <span>Completed</span><strong id="autoActiveCompletedValue">N/A</strong>
+              </div>
+            </div>
+
+            <div class="monitor-panel">
+              <h3 class="panel-title">Latest Completed V2 Run</h3>
+              <div class="detail-grid">
+                <span>TDS before</span><strong id="autoLatestTdsBeforeValue">N/A</strong>
+                <span>TDS after mixing</span><strong id="autoLatestTdsAfterValue">N/A</strong>
+                <span>Delta TDS</span><strong id="autoLatestDeltaValue">N/A</strong>
+                <span>Step dose</span><strong id="autoLatestStepDoseValue">N/A</strong>
+                <span>Mixing delay</span><strong id="autoLatestMixingDelayValue">N/A</strong>
+                <span>Completed</span><strong id="autoLatestCompletedValue">N/A</strong>
+                <span>Result</span><strong id="autoLatestResultValue">N/A</strong>
+              </div>
+              <p id="autoLatestResultNote" class="meta-text">No completed V2 run yet.</p>
+            </div>
+          </div>
+
+          <div class="history-toolbar">
+            <h3 class="panel-title">Dosing Runs</h3>
+            <label for="autoDosingRunsFilter">Filter</label>
+            <select id="autoDosingRunsFilter">
+              <option value="all">All</option>
+              <option value="v2">V2 only</option>
+              <option value="v1">V1 legacy</option>
+              <option value="active">Active / mixing</option>
+              <option value="completed">Completed</option>
+            </select>
           </div>
           <div class="table-wrap calibration-history-wrap">
             <table>
               <thead>
                 <tr>
                   <th>Time</th>
-                  <th>Mode</th>
+                  <th>Version / mode</th>
                   <th>Status</th>
+                  <th>Current step</th>
                   <th>TDS start</th>
                   <th>TDS after</th>
                   <th>Delta</th>
                   <th>Step ml</th>
+                  <th>Mixing delay</th>
                   <th>Mixing until</th>
+                  <th>Completed</th>
                   <th>Pump A</th>
                   <th>Pump B</th>
+                  <th>Daily used before</th>
+                  <th>Result</th>
                 </tr>
               </thead>
               <tbody id="autoDosingRunsBody">
                 <tr>
-                  <td colspan="9">Loading dosing runs...</td>
+                  <td colspan="15">Loading dosing runs...</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p id="autoDosingRunsStatus" class="meta-text calibration-history-status">Latest 10 runs</p>
+          <p id="autoDosingRunsStatus" class="meta-text calibration-history-status">Latest runs</p>
+
+          <div class="history-toolbar">
+            <h3 class="panel-title">Auto Dosing Event Log</h3>
+            <label for="autoDosingEventsFilter">Filter</label>
+            <select id="autoDosingEventsFilter">
+              <option value="all">All</option>
+              <option value="skip">Skip</option>
+              <option value="run">Run</option>
+              <option value="safety">Safety</option>
+              <option value="settings">Settings</option>
+            </select>
+          </div>
+          <p id="autoDosingEventsSummary" class="meta-text">Loading event summary...</p>
+          <div class="table-wrap calibration-history-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Type</th>
+                  <th>Reason</th>
+                  <th>TDS</th>
+                  <th>Main pump</th>
+                  <th>Water level</th>
+                  <th>Daily dose used</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody id="autoDosingEventsBody">
+                <tr>
+                  <td colspan="8">Loading auto dosing events...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p id="autoDosingEventsStatus" class="meta-text calibration-history-status">Latest 50 events</p>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="exportTitle">
+        <div class="section-heading">
+          <h2 id="exportTitle">Export Data</h2>
+          <span class="meta-text">CSV files for reports and review</span>
+        </div>
+        <div class="export-actions">
+          <a class="button-link" href="/api/devices/device001/export/dosing-runs.csv">Export Dosing Runs CSV</a>
+          <a class="button-link" href="/api/devices/device001/export/nutrient-response-tests.csv">Export Nutrient Response Tests CSV</a>
+          <a class="button-link" href="/api/devices/device001/export/auto-dosing-events.csv">Export Auto Dosing Events CSV</a>
         </div>
       </section>
 

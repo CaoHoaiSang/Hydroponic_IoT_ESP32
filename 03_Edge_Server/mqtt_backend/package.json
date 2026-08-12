@@ -6,7 +6,10 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node src/index.js"
+    "dev": "node src/index.js",
+    "test": "node --test",
+    "stage0:test": "node staging/runStage0Checks.js",
+    "stage1:test": "node staging/stage1/runStage1PreflightChecks.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

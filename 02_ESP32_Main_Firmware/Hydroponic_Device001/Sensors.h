@@ -6,6 +6,9 @@ struct SensorData {
   float tdsVoltage;
   int tdsMin;
   int tdsMax;
+  int tdsSampleCount;
+  int tdsSpreadRaw;
+  bool tdsWindowStable;
   float waterTemp;
   bool waterTempValid;
   const char* waterLevel;
@@ -13,6 +16,7 @@ struct SensorData {
 };
 
 void sensorsBegin();
+void sensorsUpdate(unsigned long currentMs);
 SensorData readSensors();
 
 #endif

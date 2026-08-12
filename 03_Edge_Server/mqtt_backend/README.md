@@ -9,7 +9,112 @@ ESP32 -> MQTT Broker -> Node.js Edge Server -> MongoDB
 Browser Dashboard -> Node.js Edge Server REST API -> MongoDB
 ```
 
-In the current prototype, the local Node.js backend + MQTT broker + dashboard represent the Hydroponic Edge AI Gateway / Local Control Server. Phase 20B keeps MongoDB and does not migrate to SQLite/PostgreSQL or Fleet Management Cloud.
+## Phase 22A Fix 1 Telemetry Identity And Shadow Mode
+
+Phase 22A compiles the ESP32 firmware with Telemetry Identity V2 and adds conservative
+backend ordering. Every new firmware measurement has `schemaVersion=2`, a boot-scoped
+`bootId`, increasing `measurementSeq`, derived `measurementId`, and
+`sampledAtUptimeMs`. MQTT retries reuse the exact same identity and payload.
+
+The backend rejects incomplete V2 identity, handles duplicate identity idempotently,
+excludes out-of-order and unconfirmed-boot packets from latest/stability/control, and
+requires three distinct accepted measurements from one boot for stability. Legacy
+payloads remain visible in history as `LEGACY_NO_IDENTITY` but are control-ineligible.
+
+Fix 1 does not use `receivedAt` as proof of freshness. It derives `measurementAt` from
+the prior same-boot uptime anchor. The first unanchored row and impossible uptime timing
+remain control-ineligible. Sensor rows also use `PROCESSING|FAILED|COMPLETED` plus a
+30-second lease so retry can resume a failed/stuck row without creating a duplicate.
+
+Shadow Mode is configured independently:
+
+```text
+SHADOW_MODE_ENABLED=false
+```
+
+Set it to `true` only when observation records are wanted. Shadow Mode evaluates 30
+safety gates and saves hypothetical decisions to `shadow_dosing_decisions`. It has no
+MQTT publisher dependency, never creates `dosing_runs`, and never operates a pump.
+Daily-dose gate input comes from the same Phase 21 `getDailyDoseUsage()` function,
+including manual reset windows and active runs.
+
+Phase 22A locks Auto Dosing OFF at runtime and disables its dashboard enable checkbox.
+Attempts to save `enabled=true` return HTTP 409 with
+`phase22a_auto_dosing_locked_off`. The existing Pump A -> Pump B -> mixing-wait code is
+retained for regression coverage but is not reachable from production telemetry in this phase.
+
+Read-only Shadow APIs:
+
+```text
+GET /api/devices/:deviceId/shadow-mode/status
+GET /api/devices/:deviceId/shadow-mode/decisions?limit=20
+```
+
+No Phase 22A migration assigns identity to legacy rows. No production database or MQTT
+broker was used during implementation.
+
+## Phase 21 EC/TDS Safety Contract
+
+The current demo crop is **cải ngọt**. Existing target numbers are not treated as a
+verified cải ngọt nutrient profile. Auto Dosing defaults to OFF and cannot be enabled
+until the operator explicitly confirms the target range for cải ngọt and all readiness
+checks pass.
+
+Phase 21 changes calibration to EC-first:
+
+```text
+ADC median -> voltage -> voltage25 -> active EC calibration set
+-> in-range EC interpolation -> TDS scale 500 -> quality/stability gate
+```
+
+- Scale is fixed to `500`; `tdsFactor=0.5`.
+- Calibration sets use `draft -> active -> retired` and need at least three valid points.
+- Only `devices.activeTdsCalibrationSetId` is used for control.
+- Active sets are immutable and legacy points are never activated automatically.
+- Outside the active voltage range, `ecUsCm` and `tdsPpm` are null; no extrapolation is used.
+- Firmware sends 30-sample median quality fields; backend requires three stable payloads.
+- Backend independently enforces `tdsWindowStable === (tdsSampleCount === 30 && tdsSpreadRaw <= 50)`.
+- Accepted sensor rows and `devices.latest` contain explicit `receivedAt` and uptime-derived
+  `measurementAt`; unverified timing fails closed.
+- Post-mixing completion requires `measurementAt > mixingUntil` and the same still-active calibration set used at run start.
+- Unique partial active locks plus atomic Pump B claim prevent concurrent runs and duplicate Pump B publication.
+- Calibration activation/retirement uses MongoDB transactions when supported and checked compensating rollback otherwise.
+- Firmware and backend Phase 21 must be upgraded together.
+
+Calibration-set endpoints:
+
+```text
+POST /api/devices/:deviceId/tds-calibration-sets
+GET  /api/devices/:deviceId/tds-calibration-sets
+GET  /api/devices/:deviceId/tds-calibration-sets/active
+GET  /api/devices/:deviceId/tds-calibration-sets/:setId
+POST /api/devices/:deviceId/tds-calibration-sets/:setId/points
+POST /api/devices/:deviceId/tds-calibration-sets/:setId/validate
+POST /api/devices/:deviceId/tds-calibration-sets/:setId/activate
+POST /api/devices/:deviceId/tds-calibration-sets/:setId/retire
+GET  /api/devices/:deviceId/auto-dosing/readiness
+```
+
+Legacy audit migration defaults to dry-run:
+
+```powershell
+node scripts/migrateLegacyTdsCalibrations.js
+# Only after reviewing the report:
+node scripts/migrateLegacyTdsCalibrations.js --apply
+```
+
+The scan includes all rows and uses the same persisted-point completeness helper as
+calibration-set activation. It checks device/set identity, ADC/voltage consistency,
+EC and scale-500 TDS consistency, water temperature, 25 C compensation metadata,
+compensated voltage, factor/reference constants, and the EC interpolation method.
+`reasonCounts` reports every incomplete metadata group. Dry-run performs no writes.
+Apply mode only writes `legacy`, `legacyReasons`, and `legacyAuditedAt`; it never fills
+missing calibration values, infers scale 500, changes lifecycle status, or activates a set.
+
+The Phase 21 implementation and tests do not start MQTT, send pump commands, activate a
+set, or connect to the operational database.
+
+In the current prototype, the local Node.js backend + MQTT broker + dashboard represent the Hydroponic Edge AI Gateway / Local Control Server. Phase 20C keeps MongoDB and does not migrate to SQLite/PostgreSQL or Fleet Management Cloud.
 
 Current scope:
 
@@ -28,6 +133,68 @@ Current scope:
 - Estimate `tdsPpm` in backend sensor logs when TDS calibration exists
 - Store Nutrient Response Test records in `nutrient_response_tests`
 - Run Auto Dosing V2 as disabled-by-default closed-loop step dosing
+- Store throttled Auto Dosing evaluation and transition history in `auto_dosing_events`
+- Show daily dose usage and a controlled prototype reset
+- Export dosing, nutrient response, and Auto Dosing event data as CSV
+
+## Phase 20B/20C Runtime Status
+
+Phase 20B and Phase 20C passed supervised runtime prototype validation.
+
+Runtime-verified features:
+
+- Main circulation pump continuous ON/OFF from the dashboard.
+- Main, Pump A, and Pump B pulse commands remain functional.
+- Pump A/B continuous `set/on` commands are rejected; Pump A/B remain pulse-only.
+- Pump status and `pump_logs` record `set_on`, `set_off`, pulse start, and pulse completion.
+- Nutrient Response Test records are stored and backend averages/deltas are calculated correctly.
+- Auto Dosing V2 disabled safety prevents new dosing runs.
+- The main-pump-OFF interlock prevents Pump A/B commands when `requireMainPumpOn=true`.
+- Auto Dosing V2 performs one conservative Pump A step, then Pump B, then `mixing_wait`, then completes after the next eligible sensor payload.
+- Daily dose limit stops additional dosing.
+- Auto Dosing Safety Summary, Daily Dose Usage, Active Run, Latest Completed Run, V1/V2 history, and Event Log display correctly.
+- Dosing runs, nutrient response tests, and Auto Dosing events CSV exports download with data.
+
+Important safety warning:
+
+> Auto Dosing must remain disabled by default. Enable only during supervised tests or controlled operation.
+
+Recommended safe operating settings:
+
+```text
+stepDoseMlPerPump = 1
+maxDoseMlPerPumpPerRun = 1
+maxDailyDoseMlPerPump = 1 or 2 during prototype testing
+mixingDelayMs = 900000 for real nutrient operation
+requireMainPumpOn = true
+```
+
+Main pump continuous ON may be used for circulation and mixing. Pump A/B must remain pulse-only. Large one-shot dosing is not permitted.
+
+Runtime Nutrient Response Test 4:
+
+| Measurement | Before | After 15 minutes | Delta |
+|---|---:|---:|---:|
+| Dashboard average | 406.23 ppm | 427.28 ppm | +21.05 ppm |
+| Main handheld pen | 535 ppm | 573 ppm | +38 ppm |
+| Secondary handheld pen | 449 ppm | 462 ppm | +13 ppm |
+
+Test conditions: 16 L working level, TDS sensor supply 5V, main pump ON, Auto Dosing OFF, 1 ml Pump A + 1 ml Pump B, 15-minute mixing time.
+
+Runtime real-nutrient Auto Dosing V2 result:
+
+| Field | Result |
+|---|---|
+| Mode | `closed_loop_step` |
+| Status | `completed` |
+| TDS at start | 302.27 ppm |
+| TDS after mixing | 348.88 ppm |
+| Delta TDS | +46.61 ppm |
+| Pump A | 1 ml, 500 ms, completed |
+| Pump B | 1 ml, 556 ms, completed |
+| Mixing delay | 15 minutes |
+| Water level after mixing | `normal` |
+| Result | `positive_response` |
 
 Not implemented yet:
 
@@ -89,7 +256,7 @@ http://localhost:3001/
 ```
 
 Dashboard monitoring data refreshes every 5 seconds.
-Dashboard shows active alerts, main pump continuous control, pulse test controls, manual Pump A/B calibration results, estimated TDS ppm when calibrated, Nutrient Response Tests, and Auto Dosing V2 settings/status.
+Dashboard shows active alerts, main pump continuous control, pulse test controls, manual Pump A/B calibration results, estimated TDS ppm when calibrated, Nutrient Response Tests, and Auto Dosing V2 safety monitoring.
 
 ## Manual Pump Test
 
@@ -275,10 +442,10 @@ Backend calculations:
 - `result.deltaPenSecondary`.
 - `result.estimatedResponsePpmPerMl` as ppm increase per 1 ml A + 1 ml B pair.
 
-## Auto Dosing V2
+## Auto Dosing V2 (Historical Workflow, Locked OFF In Phase 22A)
 
 Auto Dosing V2 is a disabled-by-default, rule-based closed-loop step dosing workflow.
-It is disabled by default and must be explicitly enabled from the dashboard or API.
+During Phase 22A it is locked OFF and cannot be enabled from the dashboard or API.
 Dashboard auto-refresh does not overwrite unsaved Auto Dosing form edits.
 Press `Save Settings` to apply Auto Dosing setting changes.
 
@@ -313,7 +480,11 @@ Safety rules:
 - Dosing only runs when `enabled=true`.
 - Dosing only runs when water level is `normal`.
 - Dosing only runs when water temperature sensor is valid.
-- If `tdsStable` exists and is false, dosing is skipped.
+- Dosing is fail-closed: `tdsStable === true` and `tdsControlValid === true` are
+  both required. The firmware window must contain exactly 30 samples within the
+  configured raw-spread limit, the measurement must be fresh and inside the
+  active calibration-set range, temperature must be valid, and every water,
+  pump, calibration, target, run, and daily-limit interlock must pass explicitly.
 - If `requireMainPumpOn=true`, dosing only runs when main pump is ON.
 - Dosing only runs when `tdsPpm < targetMinPpm`.
 - If `tdsPpm` is within range, no pump command is sent.
@@ -323,7 +494,9 @@ Safety rules:
 - Pump A runs first. Pump B only runs after Pump A completes successfully.
 - After Pump B completes, the run enters `mixing_wait`.
 - No new dosing starts during `mixing_wait`.
-- After `mixingDelayMs`, the next valid sensor payload completes the run with `tdsPpmAfterMixing` and `deltaTdsPpm`.
+- After `mixingDelayMs`, only a fresh control-valid sensor payload with
+  `measurementAt > mixingUntil` from the same still-active calibration set may
+  complete the run with `tdsPpmAfterMixing` and `deltaTdsPpm`.
 - Daily dose limit is enforced before starting a new step.
 
 Default settings:
@@ -332,12 +505,14 @@ Default settings:
 {
   "mode": "closed_loop_step",
   "enabled": false,
+  "cropCode": "cai_ngot",
+  "targetRangeConfirmed": false,
   "targetMinPpm": 800,
   "targetMaxPpm": 1200,
   "stepDoseMlPerPump": 1.0,
   "mixingDelayMs": 900000,
   "maxDoseMlPerPumpPerRun": 1.0,
-  "maxDailyDoseMlPerPump": 10.0,
+  "maxDailyDoseMlPerPump": 2.0,
   "requireMainPumpOn": true,
   "responseEstimatePpmPerMl": 30,
   "responseEstimateWorkingLevelLiters": 16
@@ -382,7 +557,7 @@ Example settings update:
   "stepDoseMlPerPump": 1,
   "mixingDelayMs": 900000,
   "maxDoseMlPerPumpPerRun": 1,
-  "maxDailyDoseMlPerPump": 10,
+  "maxDailyDoseMlPerPump": 2,
   "requireMainPumpOn": true,
   "responseEstimatePpmPerMl": 30,
   "responseEstimateWorkingLevelLiters": 16
@@ -391,104 +566,133 @@ Example settings update:
 
 For a clean-water test, keep nutrient bottles disconnected, set main pump ON, temporarily set `mixingDelayMs=60000`, and set `targetMinPpm` above the current `tdsPpm` to trigger one safe closed-loop step.
 
-## TDS Calibration
+## Phase 20C Monitoring and Safety Tools
 
-TDS Calibration V1 used a simple one-point voltage-factor calibration.
-Runtime testing showed that one-point calibration matched the external TDS meter at the calibration point, but was not accurate after dilution.
+Phase 20C does not change the working Phase 20B Pump A -> Pump B -> `mixing_wait` sequence.
+It adds monitoring, event history, daily usage visibility, a controlled prototype reset, settings guardrails, and report exports.
 
-TDS Calibration V2 keeps each saved record as one calibration point and uses multiple points when available.
-TDS Calibration V2.1 adds temperature compensation because TDS/EC depends on water temperature.
-The ESP32 continues publishing raw TDS ADC and voltage. The backend estimates TDS ppm from stored calibration points.
-The backend uses DS18B20 `waterTemp` to normalize TDS voltage to 25 C before calibration and runtime estimation.
+Confirmed Phase 20B runtime results:
 
-Temperature compensation formula:
+- Main pump continuous ON/OFF: passed.
+- Pump A/B continuous `set` commands: rejected as required.
+- Existing pulse commands: passed.
+- Nutrient Response Logging: passed.
+- Auto Dosing V2 disabled, main pump OFF, one-step, mixing wait, and daily limit safety: passed.
 
-```text
-temperatureCoefficient = 1 + 0.02 * (waterTemp - 25)
-voltage25 = voltage / temperatureCoefficient
-```
-
-One-point fallback formula:
+Latest real nutrient one-step result:
 
 ```text
-tdsPpm = voltage25 * calibrationFactor
-calibrationFactor = referenceTdsPpm / measuredVoltage25
+TDS start: 302.27 ppm
+TDS after 15 minutes mixing: 348.88 ppm
+Delta: +46.61 ppm
+Dose: 1 ml Pump A + 1 ml Pump B
 ```
 
-Piecewise linear formula between two temperature-compensated calibration points:
+Recommended prototype settings:
+
+- Keep Auto Dosing OFF by default.
+- `stepDoseMlPerPump = 1`
+- `maxDoseMlPerPumpPerRun = 1`
+- `maxDailyDoseMlPerPump = 1` or `2`
+- `mixingDelayMs = 900000` for real nutrient operation.
+- `requireMainPumpOn = true`
+
+Dashboard safety behavior:
+
+- Unsaved form edits remain protected from the 5-second refresh.
+- Enabling Auto Dosing requires operator confirmation.
+- Mixing delays below 15 minutes show a testing-only warning.
+- Prototype and real-nutrient presets always keep `enabled=false`.
+- The monitoring area shows current safety state, calibration readiness, daily usage, active run, latest completed V2 result, V1/V2 run history, and Auto Dosing events.
+
+Auto Dosing events:
+
+- Important run transitions and settings updates are always logged.
+- Repeated skip reasons are logged when the reason changes or after the default 5-minute throttle interval.
+- `lastEvaluationReason` remains in `auto_dosing_settings` for quick display.
+
+Daily dose reset:
+
+- Requires exact confirmation text `RESET DAILY DOSE`.
+- Creates a `manual_daily_reset` event.
+- Daily usage ignores runs before the latest reset timestamp on the same local day.
+- It does not delete `dosing_runs` or modify `pump_logs`.
+- Resetting counter does not remove nutrient physically added to reservoir.
+- Reset does not enable Auto Dosing.
+
+Phase 20C REST endpoints:
 
 ```text
-slope = (ppm2 - ppm1) / (voltage25_2 - voltage25_1)
-intercept = ppm1 - slope * voltage25_1
-tdsPpm = slope * currentVoltage25 + intercept
+GET  /api/devices/:deviceId/auto-dosing/events?limit=50
+GET  /api/devices/:deviceId/auto-dosing/events/summary
+GET  /api/devices/:deviceId/auto-dosing/daily-usage
+POST /api/devices/:deviceId/auto-dosing/daily-usage/reset
+GET  /api/devices/:deviceId/export/dosing-runs.csv
+GET  /api/devices/:deviceId/export/nutrient-response-tests.csv
+GET  /api/devices/:deviceId/export/auto-dosing-events.csv
 ```
 
-Rules:
-
-- No calibration points: `tdsPpm = null`.
-- One calibration point: backend falls back to one-point voltage-factor mode and shows `one_point_calibration_only`.
-- Two or more calibration points: backend sorts points by `measuredVoltage25` and uses piecewise linear interpolation.
-- If current `voltage25` is outside the calibrated range, backend extrapolates from the nearest two points and marks the result out of range.
-- If water temperature is missing, backend falls back to raw voltage and shows `water_temp_missing_for_tds_compensation`.
-- Estimated `tdsPpm` is clamped to a minimum of 0.
-
-Example:
-
-```text
-measuredVoltage = 2.280 V
-waterTemp = 29.63 C
-temperatureCoefficient = 1 + 0.02 * (29.63 - 25) = 1.0926
-measuredVoltage25 = 2.280 / 1.0926 = 2.087 V
-referenceTdsPpm = 900 ppm
-calibrationFactor = 900 / 2.087 = 431.241 ppm/V
-```
-
-For better accuracy, clear old incorrect calibration points if needed and save at least two fresh temperature-compensated calibration points:
-
-1. Low ppm point.
-2. High ppm point.
-
-Dashboard workflow:
-
-1. Put the TDS probe into solution.
-2. Wait for TDS voltage to stabilize.
-3. Use ppm mode on the external TDS meter.
-4. Click `Use Latest Sensor Values` to fill raw ADC, voltage, and water temperature.
-5. Enter the external reference ppm and optional note.
-6. Save TDS calibration point.
-7. Repeat for at least one low ppm point and one high ppm point.
-8. Confirm future `sensor_logs` include `tdsPpm`, calibration mode, point count, in-range status, and warning when applicable.
-
-REST endpoints:
-
-```text
-POST http://localhost:3001/api/devices/device001/tds-calibration
-GET  http://localhost:3001/api/devices/device001/tds-calibrations/latest
-GET  http://localhost:3001/api/devices/device001/tds-calibrations?limit=10
-```
-
-Example TDS calibration request:
+Daily reset request:
 
 ```json
 {
-  "measuredRaw": 2828,
-  "measuredVoltage": 2.279,
-  "referenceTdsPpm": 900,
-  "waterTemp": 29.63,
-  "method": "multi_point_piecewise_linear",
-  "note": "external TDS meter reference"
+  "confirmText": "RESET DAILY DOSE",
+  "reason": "prototype_test_session"
 }
 ```
 
-TDS Calibration V2.1 notes:
+CSV output uses fixed field lists and escapes commas, quotes, and line breaks for report writing.
 
-- Old one-point calibration records are kept and reused as calibration points.
-- Old calibration points without temperature compensation may affect results.
-- Fresh low/high calibration points are recommended after enabling temperature compensation.
-- `tdsPpm` is estimated by the backend, not by ESP32 firmware.
-- Raw sensor payloads remain unchanged.
-- Auto Dosing V2 is implemented for closed-loop clean-water safety testing.
-- Adaptive Dosing is still not implemented.
+## EC/TDS Calibration - Current Phase 21 Workflow
+
+Legacy V1-V2.1 rows are retained for labeled audit history only. Their ppm-first,
+one-point/two-point, missing-temperature fallback, point-reuse, and extrapolation rules
+are prohibited for Phase 21 control. Legacy rows are never mixed into a draft set and
+never activated automatically.
+
+Current rules:
+
+- Create a new draft calibration set for each recalibration campaign.
+- Use physical EC references in `referenceEcUsCm`; scale is fixed to 500 and backend
+  derives `referenceTdsPpm = referenceEcUsCm * 0.5`.
+- Every point requires valid raw ADC, matching voltage, and DS18B20 temperature so the
+  backend can calculate `measuredVoltage25`.
+- A set needs at least three distinct points with strictly increasing voltage25 and EC.
+- Only draft sets accept points. Active sets are immutable.
+- Validate immediately before activation. Activation retires the previous set and keeps
+  Auto Dosing disabled.
+- Missing temperature, an invalid set, or voltage outside the active calibrated range
+  produces `ecUsCm=null`, `tdsPpm=null`, and an invalid control state. There is no fallback
+  to raw voltage and no extrapolation.
+- Two identical 1413 us/cm packets provide one distinct EC level, not three points.
+
+Create a draft set:
+
+```powershell
+curl -X POST http://localhost:3001/api/devices/device001/tds-calibration-sets -H "Content-Type: application/json" -d "{\"referenceMeter\":\"external EC meter\",\"note\":\"supervised certified references\"}"
+```
+
+Add one EC reference point to the returned `<SET_ID>`:
+
+```powershell
+curl -X POST http://localhost:3001/api/devices/device001/tds-calibration-sets/<SET_ID>/points -H "Content-Type: application/json" -d "{\"measuredRaw\":1750,\"measuredVoltage\":1.410,\"waterTemp\":25.0,\"referenceEcUsCm\":1413,\"note\":\"Hanna 1413 us/cm\"}"
+```
+
+Repeat with at least two additional distinct certified EC references, then validate. Do
+not activate when validation fails:
+
+```powershell
+curl -X POST http://localhost:3001/api/devices/device001/tds-calibration-sets/<SET_ID>/validate
+curl -X POST http://localhost:3001/api/devices/device001/tds-calibration-sets/<SET_ID>/activate
+```
+
+Activation is a lifecycle operation, not permission to dose. Confirm readiness separately
+and keep Auto Dosing OFF until firmware, database, dashboard, and clean-water runtime checks
+have passed.
+
+Legacy history remains available at the old GET endpoints for audit only. Legacy POST
+requires an explicit `calibrationSetId` and delegates to draft-point validation; the
+calibration-set point endpoint above is preferred.
 
 ## Alerts
 
@@ -514,9 +718,14 @@ Alert & Data Quality V1 supports:
 - `http://localhost:3001/api/devices/device001/pump-calibrations/latest`
 - `http://localhost:3001/api/devices/device001/pump-calibrations/A?limit=10`
 - `http://localhost:3001/api/devices/device001/pump-calibrations/B?limit=10`
-- `POST http://localhost:3001/api/devices/device001/tds-calibration`
-- `http://localhost:3001/api/devices/device001/tds-calibrations/latest`
-- `http://localhost:3001/api/devices/device001/tds-calibrations?limit=10`
+- `POST http://localhost:3001/api/devices/device001/tds-calibration-sets`
+- `http://localhost:3001/api/devices/device001/tds-calibration-sets`
+- `http://localhost:3001/api/devices/device001/tds-calibration-sets/active`
+- `POST http://localhost:3001/api/devices/device001/tds-calibration-sets/:setId/points`
+- `POST http://localhost:3001/api/devices/device001/tds-calibration-sets/:setId/validate`
+- `POST http://localhost:3001/api/devices/device001/tds-calibration-sets/:setId/activate`
+- `POST http://localhost:3001/api/devices/device001/tds-calibration-sets/:setId/retire`
+- `http://localhost:3001/api/devices/device001/tds-calibrations?limit=10` (legacy history only)
 - `POST http://localhost:3001/api/devices/device001/nutrient-response-tests`
 - `http://localhost:3001/api/devices/device001/nutrient-response-tests?limit=20`
 - `http://localhost:3001/api/devices/device001/nutrient-response-tests/latest`
@@ -525,6 +734,13 @@ Alert & Data Quality V1 supports:
 - `PUT http://localhost:3001/api/devices/device001/auto-dosing/settings`
 - `http://localhost:3001/api/devices/device001/auto-dosing/runs?limit=20`
 - `http://localhost:3001/api/devices/device001/auto-dosing/active-run`
+- `http://localhost:3001/api/devices/device001/auto-dosing/events?limit=50`
+- `http://localhost:3001/api/devices/device001/auto-dosing/events/summary`
+- `http://localhost:3001/api/devices/device001/auto-dosing/daily-usage`
+- `POST http://localhost:3001/api/devices/device001/auto-dosing/daily-usage/reset`
+- `http://localhost:3001/api/devices/device001/export/dosing-runs.csv`
+- `http://localhost:3001/api/devices/device001/export/nutrient-response-tests.csv`
+- `http://localhost:3001/api/devices/device001/export/auto-dosing-events.csv`
 
 ## REST API Test Commands
 
@@ -618,22 +834,23 @@ Pump A calibration history:
 curl "http://localhost:3001/api/devices/device001/pump-calibrations/A?limit=10"
 ```
 
-Save TDS calibration:
+Create a Phase 21 EC calibration set:
 
 ```powershell
-curl -X POST http://localhost:3001/api/devices/device001/tds-calibration -H "Content-Type: application/json" -d "{\"measuredRaw\":2828,\"measuredVoltage\":2.279,\"referenceTdsPpm\":900,\"waterTemp\":29.63,\"method\":\"multi_point_piecewise_linear\",\"note\":\"external TDS meter reference\"}"
+curl -X POST http://localhost:3001/api/devices/device001/tds-calibration-sets -H "Content-Type: application/json" -d "{\"referenceMeter\":\"external EC meter\",\"note\":\"new supervised draft\"}"
 ```
 
-Latest TDS calibration:
+Add an EC point to the returned draft set:
 
 ```powershell
-curl http://localhost:3001/api/devices/device001/tds-calibrations/latest
+curl -X POST http://localhost:3001/api/devices/device001/tds-calibration-sets/<SET_ID>/points -H "Content-Type: application/json" -d "{\"measuredRaw\":1750,\"measuredVoltage\":1.410,\"waterTemp\":25.0,\"referenceEcUsCm\":1413,\"note\":\"certified reference\"}"
 ```
 
-TDS calibration history:
+Validate and inspect active EC calibration:
 
 ```powershell
-curl "http://localhost:3001/api/devices/device001/tds-calibrations?limit=10"
+curl -X POST http://localhost:3001/api/devices/device001/tds-calibration-sets/<SET_ID>/validate
+curl http://localhost:3001/api/devices/device001/tds-calibration-sets/active
 ```
 
 Save nutrient response test:
@@ -657,7 +874,7 @@ curl http://localhost:3001/api/devices/device001/auto-dosing/settings
 Update auto dosing settings:
 
 ```powershell
-curl -X PUT http://localhost:3001/api/devices/device001/auto-dosing/settings -H "Content-Type: application/json" -d "{\"mode\":\"closed_loop_step\",\"enabled\":false,\"targetMinPpm\":800,\"targetMaxPpm\":1200,\"stepDoseMlPerPump\":1,\"mixingDelayMs\":900000,\"maxDoseMlPerPumpPerRun\":1,\"maxDailyDoseMlPerPump\":10,\"requireMainPumpOn\":true,\"responseEstimatePpmPerMl\":30,\"responseEstimateWorkingLevelLiters\":16}"
+curl -X PUT http://localhost:3001/api/devices/device001/auto-dosing/settings -H "Content-Type: application/json" -d "{\"mode\":\"closed_loop_step\",\"enabled\":false,\"targetMinPpm\":800,\"targetMaxPpm\":1200,\"stepDoseMlPerPump\":1,\"mixingDelayMs\":900000,\"maxDoseMlPerPumpPerRun\":1,\"maxDailyDoseMlPerPump\":2,\"requireMainPumpOn\":true,\"responseEstimatePpmPerMl\":30,\"responseEstimateWorkingLevelLiters\":16}"
 ```
 
 Auto dosing active run:
@@ -675,7 +892,7 @@ curl "http://localhost:3001/api/devices/device001/auto-dosing/runs?limit=10"
 ## Optional Manual MQTT Publish Test
 
 ```powershell
-mosquitto_pub -h localhost -t hydroponic/device001/sensor -m "{\"deviceId\":\"device001\",\"tdsRaw\":2832,\"tdsVoltage\":2.282,\"tdsMin\":2826,\"tdsMax\":2849,\"waterTemp\":29.69,\"waterTempValid\":true,\"waterLevel\":\"normal\",\"pumpMain\":false,\"pumpA\":false,\"pumpB\":false,\"pumpSpare\":false,\"ph\":null,\"uptimeMs\":30053}"
+mosquitto_pub -h localhost -t hydroponic/device001/sensor -m "{\"deviceId\":\"device001\",\"tdsRaw\":2832,\"tdsVoltage\":2.282,\"tdsMin\":2826,\"tdsMax\":2849,\"tdsSampleCount\":30,\"tdsSpreadRaw\":23,\"tdsWindowStable\":true,\"waterTemp\":29.69,\"waterTempValid\":true,\"waterLevel\":\"normal\",\"pumpMain\":false,\"pumpA\":false,\"pumpB\":false,\"pumpSpare\":false,\"ph\":null,\"uptimeMs\":30053}"
 ```
 
 ## Check MongoDB
@@ -690,5 +907,6 @@ db.tds_calibrations.find().sort({ createdAt: -1 }).limit(5)
 db.nutrient_response_tests.find().sort({ createdAt: -1 }).limit(5)
 db.auto_dosing_settings.find()
 db.dosing_runs.find().sort({ createdAt: -1 }).limit(5)
+db.auto_dosing_events.find().sort({ createdAt: -1 }).limit(20)
 db.devices.find()
 ```

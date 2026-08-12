@@ -1,0 +1,1518 @@
+﻿diff --git a/.gitignore b/.gitignore
+index b89a493..37a4ca4 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,4 +1,5 @@
+ Secrets.h
++SecretsStage1.h
+ .env
+ node_modules/
+ .DS_Store
+@@ -7,3 +8,4 @@ build/
+ dist/
+ .vscode/
+ **/.stage0_runtime/
++**/.stage1_runtime/
+diff --git a/00_Docs/PROJECT_STATUS_REPORT.md b/00_Docs/PROJECT_STATUS_REPORT.md
+index 9a59337..06f707f 100644
+--- a/00_Docs/PROJECT_STATUS_REPORT.md
++++ b/00_Docs/PROJECT_STATUS_REPORT.md
+@@ -7,8 +7,8 @@
+ 
+ ## 2. Current Project Phase
+ 
+-- Current phase: Phase 22B Stage 0 - Isolated Staging Preparation
+-- Short description: A repeatable loopback-only MongoDB, MQTT, backend, Shadow Mode, API, and Dashboard staging stack is implemented and runtime-tested. Auto Dosing remains locked OFF, pump command services and publisher are disabled in staging, and no production endpoint, credential, firmware upload, or hardware was used.
++- Current phase: Phase 22B Stage 1 Preflight
++- Short description: Authenticated MQTT is bound only to loopback and the private LAN IPv4, firmware/backend topics match the `stage1/` namespace, and the USB Stage 1 firmware profile has a compile-tested actuator lock. Runtime staging passed with Auto Dosing OFF, zero pump command, and zero dosing run. Physical ESP32 networking remains unverified because staging Wi-Fi credentials were not configured and firmware was not uploaded.
+ 
+ ## 3. Completed Tasks
+ 
+@@ -43,6 +43,7 @@
+ | 27 | Phase 22A Shadow Mode | Implemented | Pure 30-gate engine, one decision per accepted measurement, read-only APIs, dashboard status/history, and zero-side-effect tests implemented. Runtime test on operational services is waiting. |
+ | 28 | Phase 22A Fix 2 independent re-audit | Done | Expired `PROCESSING` lease claim is now atomic by state, lease, and attempt. Full suite: 173 passed, 0 failed, 0 skipped. Full Arduino compile passed; no upload. |
+ | 29 | Phase 22B Stage 0 isolated staging | Done | Real isolated MongoDB/MQTT/backend/Dashboard runtime PASS on ports 27018/18884/3100. Stop/reset/start repeatability PASS; Auto Dosing OFF, zero pump command, zero dosing run. |
++| 30 | Phase 22B Stage 1 Preflight | Partial | LAN MQTT/auth/ACL, topic parity, actuator lock, lifecycle, runtime integration, regression, and full profile compile passed. Physical Wi-Fi path is not configured or tested; no firmware upload or hardware use occurred. |
+ 
+ ## 4. Created Folders
+ 
+diff --git a/00_Docs/Telemetry_Identity_Shadow_Mode.md b/00_Docs/Telemetry_Identity_Shadow_Mode.md
+index 7595a81..e2583aa 100644
+--- a/00_Docs/Telemetry_Identity_Shadow_Mode.md
++++ b/00_Docs/Telemetry_Identity_Shadow_Mode.md
+@@ -1,4 +1,4 @@
+-# Telemetry Identity V2 And Shadow Mode - Phase 22A Fix 2 / Phase 22B Stage 0
++# Telemetry Identity V2 And Shadow Mode - Phase 22A Fix 2 / Phase 22B Stage 1 Preflight
+ 
+ ## Firmware Identity
+ 
+@@ -167,3 +167,10 @@ duplicate/retry idempotency, out-of-order and delayed data, three distinct stabl
+ measurements, Shadow history, API/Dashboard responses, Auto Dosing OFF, zero pump command,
+ and zero dosing run. Production services, credentials, firmware upload, and physical
+ hardware are not used.
++
++Phase 22B Stage 1 Preflight has also run against separate isolated services on MongoDB
++`127.0.0.1:27019`, backend `127.0.0.1:3101`, and authenticated MQTT listeners limited to
++`127.0.0.1:18885` and the machine's private LAN IPv4 on port `18885`. Firmware/backend topics
++match the `stage1/hydroponic/device001/...` namespace. Runtime checks pass with zero pump
++command delivery, zero dosing run, and Auto Dosing OFF. The USB Stage 1 firmware profile
++compiled at 938548 bytes flash (71%) and 47208 bytes static RAM (14%); it was not uploaded.
+diff --git a/02_ESP32_Main_Firmware/Hydroponic_Device001/ActuatorSafety.h b/02_ESP32_Main_Firmware/Hydroponic_Device001/ActuatorSafety.h
+new file mode 100644
+index 0000000..5f3a434
+--- /dev/null
++++ b/02_ESP32_Main_Firmware/Hydroponic_Device001/ActuatorSafety.h
+@@ -0,0 +1,14 @@
++#ifndef ACTUATOR_SAFETY_H
++#define ACTUATOR_SAFETY_H
++
++#include "BuildProfile.h"
++
++constexpr bool actuatorOnRequestAllowed(bool requestedOn) {
++  return !requestedOn || !ACTUATORS_LOCKED;
++}
++
++constexpr bool actuatorEffectiveState(bool requestedOn) {
++  return actuatorOnRequestAllowed(requestedOn) ? requestedOn : false;
++}
++
++#endif
+diff --git a/02_ESP32_Main_Firmware/Hydroponic_Device001/BuildProfile.h b/02_ESP32_Main_Firmware/Hydroponic_Device001/BuildProfile.h
+new file mode 100644
+index 0000000..3eaf259
+--- /dev/null
++++ b/02_ESP32_Main_Firmware/Hydroponic_Device001/BuildProfile.h
+@@ -0,0 +1,23 @@
++#ifndef BUILD_PROFILE_H
++#define BUILD_PROFILE_H
++
++#define HYDROPONIC_PROFILE_OPERATIONAL 0
++#define HYDROPONIC_PROFILE_USB_STAGE1 1
++
++#ifndef HYDROPONIC_BUILD_PROFILE
++#define HYDROPONIC_BUILD_PROFILE HYDROPONIC_PROFILE_OPERATIONAL
++#endif
++
++#if HYDROPONIC_BUILD_PROFILE == HYDROPONIC_PROFILE_USB_STAGE1
++#define HYDROPONIC_BUILD_PROFILE_NAME "USB_STAGE1"
++constexpr bool ACTUATORS_LOCKED = true;
++constexpr bool MQTT_PUMP_COMMANDS_ENABLED = false;
++#elif HYDROPONIC_BUILD_PROFILE == HYDROPONIC_PROFILE_OPERATIONAL
++#define HYDROPONIC_BUILD_PROFILE_NAME "OPERATIONAL"
++constexpr bool ACTUATORS_LOCKED = false;
++constexpr bool MQTT_PUMP_COMMANDS_ENABLED = true;
++#else
++#error "Unknown HYDROPONIC_BUILD_PROFILE"
++#endif
++
++#endif
+diff --git a/02_ESP32_Main_Firmware/Hydroponic_Device001/Config.h b/02_ESP32_Main_Firmware/Hydroponic_Device001/Config.h
+index 6b8bc3d..5eeb57e 100644
+--- a/02_ESP32_Main_Firmware/Hydroponic_Device001/Config.h
++++ b/02_ESP32_Main_Firmware/Hydroponic_Device001/Config.h
+@@ -3,6 +3,8 @@
+ 
+ #include <Arduino.h>
+ 
++#include "BuildProfile.h"
++
+ #define DEVICE_ID "device001"
+ const uint8_t TELEMETRY_SCHEMA_VERSION = 2;
+ 
+@@ -37,18 +39,25 @@ const unsigned long STATUS_PRINT_INTERVAL_MS = 30000;
+ const unsigned long SENSOR_READ_INTERVAL_MS = 2000;
+ const unsigned long DEFAULT_PULSE_MS = 5000;
+ 
+-// MQTT topics for device001.
++// MQTT topics are isolated by build profile. Operational topics remain unchanged.
++#if HYDROPONIC_BUILD_PROFILE == HYDROPONIC_PROFILE_USB_STAGE1
++#define MQTT_TOPIC_SENSOR "stage1/hydroponic/device001/sensor"
++#define MQTT_TOPIC_PUMP_CMD "stage1/hydroponic/device001/pump/cmd"
++#define MQTT_TOPIC_PUMP_STATUS "stage1/hydroponic/device001/pump/status"
++#define MQTT_TOPIC_ALERT "stage1/hydroponic/device001/alert"
++#define MQTT_CLIENT_ID "hydroponic_device001_stage1"
++#else
+ #define MQTT_TOPIC_SENSOR "hydroponic/device001/sensor"
+ #define MQTT_TOPIC_PUMP_CMD "hydroponic/device001/pump/cmd"
+ #define MQTT_TOPIC_PUMP_STATUS "hydroponic/device001/pump/status"
+ #define MQTT_TOPIC_ALERT "hydroponic/device001/alert"
++#define MQTT_CLIENT_ID "hydroponic_device001"
++#endif
+ 
+ // MQTT timing and client identity.
+ const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
+ const unsigned long MQTT_PUBLISH_INTERVAL_MS = 30000;
+ const uint16_t MQTT_PACKET_BUFFER_SIZE = 1024;
+-#define MQTT_CLIENT_ID "hydroponic_device001"
+-
+ // Safe MQTT/API pump pulse limits.
+ const unsigned long MQTT_PUMP_MAIN_MAX_DURATION_MS = 10000;
+ const unsigned long MQTT_PUMP_A_MAX_DURATION_MS = 5000;
+diff --git a/02_ESP32_Main_Firmware/Hydroponic_Device001/Hydroponic_Device001.ino b/02_ESP32_Main_Firmware/Hydroponic_Device001/Hydroponic_Device001.ino
+index 27bcb67..171bf7e 100644
+--- a/02_ESP32_Main_Firmware/Hydroponic_Device001/Hydroponic_Device001.ino
++++ b/02_ESP32_Main_Firmware/Hydroponic_Device001/Hydroponic_Device001.ino
+@@ -74,6 +74,7 @@ void handleCommand(String command);
+ void readSerialCommands();
+ void handleMqttMessage(const String& topic, const String& payload);
+ void handlePumpCommandPayload(const String& payload);
++bool isSerialActuatorCommand(const String& command);
+ 
+ void printPumpState(const char* pumpName, bool on) {
+   Serial.print(pumpName);
+@@ -85,6 +86,10 @@ void printHelp() {
+   Serial.println("Available commands:");
+   Serial.println("  help");
+   Serial.println("  status");
++  if (ACTUATORS_LOCKED) {
++    Serial.println("  Actuator commands are disabled by the USB Stage 1 profile.");
++    return;
++  }
+   Serial.println("  all_off");
+   Serial.println("  main_on");
+   Serial.println("  main_off");
+@@ -174,6 +179,12 @@ void setPulseTargetOff(PulseTarget target) {
+ }
+ 
+ void setPulseTargetOn(PulseTarget target) {
++  if (ACTUATORS_LOCKED) {
++    enforceActuatorSafetyLock();
++    Serial.println("Rejected: USB Stage 1 actuator lock is active");
++    return;
++  }
++
+   if (target == PULSE_MAIN) {
+     setPumpMain(true);
+     printPumpState("pumpMain", true);
+@@ -278,6 +289,12 @@ String normalizePumpName(String pump) {
+ }
+ 
+ void startPulse(PulseTarget target, unsigned long durationMs, bool fromMqtt, const PumpCommand& command) {
++  if (ACTUATORS_LOCKED) {
++    enforceActuatorSafetyLock();
++    Serial.println("Rejected: USB Stage 1 actuator lock is active");
++    return;
++  }
++
+   cancelActivePulse(!fromMqtt, "Pump command cancelled by Serial pulse command");
+ 
+   setPulseTargetOn(target);
+@@ -505,6 +522,12 @@ void handlePumpCommandPayload(const String& payload) {
+ 
+   PumpCommand command = parsePumpCommandPayload(payload);
+ 
++  if (ACTUATORS_LOCKED || !MQTT_PUMP_COMMANDS_ENABLED) {
++    enforceActuatorSafetyLock();
++    rejectPumpCommand(command, "Rejected: USB Stage 1 actuator lock is active");
++    return;
++  }
++
+   if (command.commandId.length() == 0) {
+     command.commandId = "unknown";
+   }
+@@ -575,10 +598,30 @@ void handlePumpCommandPayload(const String& payload) {
+ 
+ void handleMqttMessage(const String& topic, const String& payload) {
+   if (topic == MQTT_TOPIC_PUMP_CMD) {
++    if (!MQTT_PUMP_COMMANDS_ENABLED) {
++      enforceActuatorSafetyLock();
++      Serial.println("Rejected: MQTT pump commands are disabled by build profile");
++      return;
++    }
+     handlePumpCommandPayload(payload);
+   }
+ }
+ 
++bool isSerialActuatorCommand(const String& command) {
++  const char* actuatorCommands[] = {
++    "all_off", "main_on", "main_off", "a_on", "a_off", "b_on", "b_off",
++    "spare_on", "spare_off", "pulse_main", "pulse_a", "pulse_b"
++  };
++
++  for (const char* actuatorCommand : actuatorCommands) {
++    if (command == actuatorCommand) {
++      return true;
++    }
++  }
++
++  return false;
++}
++
+ void handleCommand(String command) {
+   command.trim();
+   command.toLowerCase();
+@@ -587,6 +630,12 @@ void handleCommand(String command) {
+     return;
+   }
+ 
++  if (ACTUATORS_LOCKED && isSerialActuatorCommand(command)) {
++    enforceActuatorSafetyLock();
++    Serial.println("Rejected: USB Stage 1 actuator lock is active");
++    return;
++  }
++
+   PumpCommand emptyCommand;
+   emptyCommand.commandId = "";
+   emptyCommand.pump = "";
+@@ -695,16 +744,20 @@ void setup() {
+   Serial.println(DEVICE_ID);
+   Serial.print("Telemetry schema: ");
+   Serial.println(TELEMETRY_SCHEMA_VERSION);
++  Serial.print("Build profile: ");
++  Serial.println(HYDROPONIC_BUILD_PROFILE_NAME);
+   Serial.print("Boot ID: ");
+   Serial.println(getTelemetryBootId());
+   Serial.println("Mode: Wi-Fi + MQTT Sensor Publish + Pump Command V2");
+   Serial.print("MQTT sensor topic: ");
+   Serial.println(MQTT_TOPIC_SENSOR);
+-  Serial.print("MQTT pump command topic: ");
+-  Serial.println(MQTT_TOPIC_PUMP_CMD);
++  Serial.print("MQTT pump command subscription: ");
++  Serial.println(MQTT_PUMP_COMMANDS_ENABLED ? MQTT_TOPIC_PUMP_CMD : "DISABLED");
+   Serial.print("MQTT pump status topic: ");
+   Serial.println(MQTT_TOPIC_PUMP_STATUS);
+-  Serial.println("Manual Serial commands are still enabled.");
++  Serial.println(ACTUATORS_LOCKED
++    ? "Actuator lock: ON - all pump outputs are forced OFF."
++    : "Manual Serial commands are enabled.");
+   Serial.println("WARNING: Pump A/B MQTT/API commands are pulse-only.");
+   Serial.println("WARNING: Main pump MQTT/API supports continuous set on/off.");
+   Serial.println("WARNING: Use clean water only for Pump A/B tests.");
+@@ -719,7 +772,13 @@ void loop() {
+   unsigned long currentMs = millis();
+ 
+   readSerialCommands();
+-  updatePulse();
++  if (ACTUATORS_LOCKED) {
++    activePulse = PULSE_NONE;
++    clearMqttCommandState();
++    enforceActuatorSafetyLock();
++  } else {
++    updatePulse();
++  }
+   mqttLoop();
+   sensorsUpdate(currentMs);
+   latestSensorData = readSensors();
+diff --git a/02_ESP32_Main_Firmware/Hydroponic_Device001/MqttService.cpp b/02_ESP32_Main_Firmware/Hydroponic_Device001/MqttService.cpp
+index 0e417c6..f11b40b 100644
+--- a/02_ESP32_Main_Firmware/Hydroponic_Device001/MqttService.cpp
++++ b/02_ESP32_Main_Firmware/Hydroponic_Device001/MqttService.cpp
+@@ -4,7 +4,11 @@
+ #include <WiFi.h>
+ 
+ #include "Config.h"
++#if HYDROPONIC_BUILD_PROFILE == HYDROPONIC_PROFILE_USB_STAGE1
++#include "SecretsStage1.h"
++#else
+ #include "Secrets.h"
++#endif
+ 
+ WiFiClient wifiClient;
+ PubSubClient mqttClient(wifiClient);
+@@ -75,11 +79,15 @@ static void connectMqttIfNeeded() {
+ 
+   if (connected) {
+     Serial.println("MQTT connected");
+-    if (mqttClient.subscribe(MQTT_TOPIC_PUMP_CMD)) {
+-      Serial.print("Subscribed to ");
+-      Serial.println(MQTT_TOPIC_PUMP_CMD);
++    if (MQTT_PUMP_COMMANDS_ENABLED) {
++      if (mqttClient.subscribe(MQTT_TOPIC_PUMP_CMD)) {
++        Serial.print("Subscribed to ");
++        Serial.println(MQTT_TOPIC_PUMP_CMD);
++      } else {
++        Serial.println("MQTT subscribe failed");
++      }
+     } else {
+-      Serial.println("MQTT subscribe failed");
++      Serial.println("MQTT pump command subscription: DISABLED BY BUILD PROFILE");
+     }
+   } else {
+     Serial.print("MQTT connect failed, state: ");
+diff --git a/02_ESP32_Main_Firmware/Hydroponic_Device001/Pumps.cpp b/02_ESP32_Main_Firmware/Hydroponic_Device001/Pumps.cpp
+index 220ce3d..f5ac24b 100644
+--- a/02_ESP32_Main_Firmware/Hydroponic_Device001/Pumps.cpp
++++ b/02_ESP32_Main_Firmware/Hydroponic_Device001/Pumps.cpp
+@@ -2,6 +2,7 @@
+ 
+ #include <Arduino.h>
+ 
++#include "ActuatorSafety.h"
+ #include "Config.h"
+ 
+ bool pumpMainState = false;
+@@ -27,11 +28,13 @@ void pumpsBegin() {
+ }
+ 
+ void setPumpMain(bool on) {
+-  pumpMainState = on;
+-  writePumpOutput(PIN_PUMP_MAIN, on);
++  const bool effectiveOn = actuatorEffectiveState(on);
++  pumpMainState = effectiveOn;
++  writePumpOutput(PIN_PUMP_MAIN, effectiveOn);
+ }
+ 
+ void setPumpA(bool on) {
++  on = actuatorEffectiveState(on);
+   if (on && pumpBState) {
+     setPumpB(false);
+   }
+@@ -41,6 +44,7 @@ void setPumpA(bool on) {
+ }
+ 
+ void setPumpB(bool on) {
++  on = actuatorEffectiveState(on);
+   if (on && pumpAState) {
+     setPumpA(false);
+   }
+@@ -50,8 +54,9 @@ void setPumpB(bool on) {
+ }
+ 
+ void setPumpSpare(bool on) {
+-  pumpSpareState = on;
+-  writePumpOutput(PIN_PUMP_SPARE, on);
++  const bool effectiveOn = actuatorEffectiveState(on);
++  pumpSpareState = effectiveOn;
++  writePumpOutput(PIN_PUMP_SPARE, effectiveOn);
+ }
+ 
+ void turnAllPumpsOff() {
+@@ -61,6 +66,21 @@ void turnAllPumpsOff() {
+   setPumpSpare(false);
+ }
+ 
++void enforceActuatorSafetyLock() {
++  if (!ACTUATORS_LOCKED) {
++    return;
++  }
++
++  pumpMainState = false;
++  pumpAState = false;
++  pumpBState = false;
++  pumpSpareState = false;
++  writePumpOutput(PIN_PUMP_MAIN, false);
++  writePumpOutput(PIN_PUMP_A, false);
++  writePumpOutput(PIN_PUMP_B, false);
++  writePumpOutput(PIN_PUMP_SPARE, false);
++}
++
+ bool getPumpMain() {
+   return pumpMainState;
+ }
+diff --git a/02_ESP32_Main_Firmware/Hydroponic_Device001/Pumps.h b/02_ESP32_Main_Firmware/Hydroponic_Device001/Pumps.h
+index 89763fa..6e67c35 100644
+--- a/02_ESP32_Main_Firmware/Hydroponic_Device001/Pumps.h
++++ b/02_ESP32_Main_Firmware/Hydroponic_Device001/Pumps.h
+@@ -8,6 +8,7 @@ void setPumpA(bool on);
+ void setPumpB(bool on);
+ void setPumpSpare(bool on);
+ void turnAllPumpsOff();
++void enforceActuatorSafetyLock();
+ 
+ bool getPumpMain();
+ bool getPumpA();
+diff --git a/02_ESP32_Main_Firmware/Hydroponic_Device001/SecretsStage1.h.example b/02_ESP32_Main_Firmware/Hydroponic_Device001/SecretsStage1.h.example
+new file mode 100644
+index 0000000..cc71fbe
+--- /dev/null
++++ b/02_ESP32_Main_Firmware/Hydroponic_Device001/SecretsStage1.h.example
+@@ -0,0 +1,15 @@
++#ifndef SECRETS_STAGE1_H
++#define SECRETS_STAGE1_H
++
++// USB Stage 1 only. The staging start script creates ignored SecretsStage1.h.
++// Never place operational broker credentials in this file.
++#define WIFI_SSID "STAGING_WIFI_SSID"
++#define WIFI_PASSWORD "STAGING_WIFI_PASSWORD"
++
++#define MQTT_HOST "192.168.1.90"
++#define MQTT_PORT 18885
++
++#define MQTT_USERNAME "STAGING_DEVICE_USERNAME"
++#define MQTT_PASSWORD "STAGING_DEVICE_PASSWORD"
++
++#endif
+diff --git a/03_Edge_Server/mqtt_backend/package.json b/03_Edge_Server/mqtt_backend/package.json
+index a34367a..6df64e3 100644
+--- a/03_Edge_Server/mqtt_backend/package.json
++++ b/03_Edge_Server/mqtt_backend/package.json
+@@ -8,7 +8,8 @@
+     "start": "node src/index.js",
+     "dev": "node src/index.js",
+     "test": "node --test",
+-    "stage0:test": "node staging/runStage0Checks.js"
++    "stage0:test": "node staging/runStage0Checks.js",
++    "stage1:test": "node staging/stage1/runStage1PreflightChecks.js"
+   },
+   "dependencies": {
+     "cors": "^2.8.5",
+diff --git a/03_Edge_Server/mqtt_backend/staging/runStage0Checks.js b/03_Edge_Server/mqtt_backend/staging/runStage0Checks.js
+index a4aef4e..3a540ab 100644
+--- a/03_Edge_Server/mqtt_backend/staging/runStage0Checks.js
++++ b/03_Edge_Server/mqtt_backend/staging/runStage0Checks.js
+@@ -4,18 +4,22 @@ const mqtt = require('mqtt');
+ const { MongoClient } = require('mongodb');
+ 
+ const CONFIG = Object.freeze({
+-  mongoUri: 'mongodb://127.0.0.1:27018',
+-  databaseName: 'hydroponic_stage0',
+-  mqttUrl: 'mqtt://127.0.0.1:18884',
+-  httpUrl: 'http://127.0.0.1:3100',
+-  sensorTopic: 'stage0/hydroponic/device001/sensor',
+-  pumpCommandTopic: 'stage0/hydroponic/device001/pump/cmd',
++  stageName: process.env.STAGING_CHECK_NAME || 'stage0',
++  serviceName: process.env.STAGING_SERVICE_NAME || 'hydroponic-stage0-backend',
++  mongoUri: process.env.STAGING_MONGO_URI || 'mongodb://127.0.0.1:27018',
++  databaseName: process.env.STAGING_DATABASE_NAME || 'hydroponic_stage0',
++  mqttUrl: process.env.STAGING_MQTT_URL || 'mqtt://127.0.0.1:18884',
++  mqttUsername: process.env.STAGING_MQTT_USERNAME || '',
++  mqttPassword: process.env.STAGING_MQTT_PASSWORD || '',
++  httpUrl: process.env.STAGING_HTTP_URL || 'http://127.0.0.1:3100',
++  sensorTopic: process.env.STAGING_SENSOR_TOPIC || 'stage0/hydroponic/device001/sensor',
++  pumpCommandTopic: process.env.STAGING_PUMP_COMMAND_TOPIC || 'stage0/hydroponic/device001/pump/cmd',
+ });
+ 
+ const DEVICE_ID = 'device001';
+ const BOOT_A = 'stageboot0001';
+ const BOOT_B = 'stageboot0002';
+-const SET_ID = 'stage0_ec_set';
++const SET_ID = `${CONFIG.stageName}_ec_set`;
+ const COLLECTIONS = [
+   'alerts',
+   'auto_dosing_events',
+@@ -32,11 +36,9 @@ const COLLECTIONS = [
+ ];
+ 
+ function assertIsolatedConfiguration() {
+-  assert.equal(CONFIG.mongoUri, 'mongodb://127.0.0.1:27018');
+-  assert.equal(CONFIG.databaseName, 'hydroponic_stage0');
+-  assert.equal(CONFIG.mqttUrl, 'mqtt://127.0.0.1:18884');
+-  assert.ok(CONFIG.sensorTopic.startsWith('stage0/'));
+-  assert.ok(CONFIG.pumpCommandTopic.startsWith('stage0/'));
++  assert.match(CONFIG.databaseName, /stage/i);
++  assert.match(CONFIG.sensorTopic, /^stage\w*\/hydroponic\//);
++  assert.match(CONFIG.pumpCommandTopic, /^stage\w*\/hydroponic\//);
+   assert.notEqual(new URL(CONFIG.mongoUri).port, '27017');
+   assert.notEqual(new URL(CONFIG.mqttUrl).port, '1883');
+ }
+@@ -188,10 +190,12 @@ async function main() {
+ 
+   const mongoClient = new MongoClient(CONFIG.mongoUri, { serverSelectionTimeoutMS: 5000 });
+   const mqttClient = mqtt.connect(CONFIG.mqttUrl, {
+-    clientId: `phase22b-stage0-check-${process.pid}`,
++    clientId: `phase22b-${CONFIG.stageName}-check-${process.pid}`,
+     clean: true,
+     reconnectPeriod: 0,
+     connectTimeout: 5000,
++    username: CONFIG.mqttUsername || undefined,
++    password: CONFIG.mqttPassword || undefined,
+   });
+   let pumpCommandCount = 0;
+ 
+@@ -199,7 +203,7 @@ async function main() {
+     const health = await waitFor(async () => {
+       const result = await fetchJson('/health');
+       return result.status === 200
+-        && result.body.service === 'hydroponic-stage0-backend'
++        && result.body.service === CONFIG.serviceName
+         && result.body.mongoConnected === true
+         && result.body.mqttConnected === true
+         ? result.body
+@@ -209,7 +213,7 @@ async function main() {
+ 
+     await mongoClient.connect();
+     const database = mongoClient.db(CONFIG.databaseName);
+-    assert.equal(database.databaseName, 'hydroponic_stage0');
++    assert.equal(database.databaseName, CONFIG.databaseName);
+     await seedStage0(database);
+ 
+     if (!mqttClient.connected) {
+@@ -412,7 +416,11 @@ async function main() {
+   }
+ }
+ 
+-main().catch((error) => {
+-  console.error(`Phase 22B Stage 0 check failed: ${error.stack || error.message}`);
+-  process.exitCode = 1;
+-});
++if (require.main === module) {
++  main().catch((error) => {
++    console.error(`Phase 22B ${CONFIG.stageName} check failed: ${error.stack || error.message}`);
++    process.exitCode = 1;
++  });
++}
++
++module.exports = { main };
+diff --git a/03_Edge_Server/mqtt_backend/staging/stage1/.env.stage1.example b/03_Edge_Server/mqtt_backend/staging/stage1/.env.stage1.example
+new file mode 100644
+index 0000000..041311e
+--- /dev/null
++++ b/03_Edge_Server/mqtt_backend/staging/stage1/.env.stage1.example
+@@ -0,0 +1,15 @@
++NODE_ENV=staging
++SERVICE_NAME=hydroponic-stage1-preflight-backend
++HTTP_HOST=127.0.0.1
++HTTP_PORT=3101
++MONGO_URI=mongodb://127.0.0.1:27019
++MONGO_DB_NAME=hydroponic_stage1_preflight
++MQTT_URL=mqtt://127.0.0.1:18885
++MQTT_USERNAME=RUNTIME_ONLY
++MQTT_PASSWORD=RUNTIME_ONLY
++MQTT_TOPIC_SENSOR=stage1/hydroponic/device001/sensor
++MQTT_TOPIC_PUMP_CMD=stage1/hydroponic/device001/pump/cmd
++MQTT_TOPIC_PUMP_STATUS=stage1/hydroponic/device001/pump/status
++MQTT_TOPIC_ALERT=stage1/hydroponic/device001/alert
++SHADOW_MODE_ENABLED=true
++PUMP_COMMANDS_DISABLED=true
+diff --git a/03_Edge_Server/mqtt_backend/staging/stage1/Get-Stage1-Status.ps1 b/03_Edge_Server/mqtt_backend/staging/stage1/Get-Stage1-Status.ps1
+new file mode 100644
+index 0000000..05c0e01
+--- /dev/null
++++ b/03_Edge_Server/mqtt_backend/staging/stage1/Get-Stage1-Status.ps1
+@@ -0,0 +1,30 @@
++$ErrorActionPreference = 'Stop'
++. (Join-Path $PSScriptRoot 'Stage1.Common.ps1')
++
++$paths = Get-Stage1Paths
++$lanAddress = Get-Stage1LanIPv4
++$status = [ordered]@{
++  mongoLoopback = Test-Stage1TcpPort -HostAddress '127.0.0.1' -Port $Stage1MongoPort
++  mqttLoopback = Test-Stage1TcpPort -HostAddress '127.0.0.1' -Port $Stage1MqttPort
++  mqttLan = Test-Stage1TcpPort -HostAddress $lanAddress -Port $Stage1MqttPort
++  backendLoopback = Test-Stage1TcpPort -HostAddress '127.0.0.1' -Port $Stage1HttpPort
++  lanAddress = $lanAddress
++  mqttPort = $Stage1MqttPort
++  authenticationRequired = $true
++  pumpCommandsDisabled = $true
++  stateFile = Test-Path -LiteralPath $paths.StateFile
++  firmwareSecretsPresent = Test-Path -LiteralPath $paths.FirmwareSecrets
++}
++if ($status.backendLoopback) {
++  try {
++    $health = Invoke-RestMethod -Uri "http://127.0.0.1:$Stage1HttpPort/health" -TimeoutSec 2
++    $status.service = $health.service
++    $status.mongoConnected = $health.mongoConnected
++    $status.mqttConnected = $health.mqttConnected
++  } catch { $status.healthError = $_.Exception.Message }
++}
++if ($status.stateFile) {
++  $state = Get-Content -LiteralPath $paths.StateFile -Raw | ConvertFrom-Json
++  $status.firmwareWifiConfigured = $state.FirmwareWifiConfigured
++}
++$status | ConvertTo-Json
+diff --git a/03_Edge_Server/mqtt_backend/staging/stage1/README.md b/03_Edge_Server/mqtt_backend/staging/stage1/README.md
+new file mode 100644
+index 0000000..adb0b28
+--- /dev/null
++++ b/03_Edge_Server/mqtt_backend/staging/stage1/README.md
+@@ -0,0 +1,28 @@
++# Phase 22B Stage 1 Preflight
++
++This profile uses isolated MongoDB `127.0.0.1:27019`, backend `127.0.0.1:3101`, and
++authenticated MQTT on `127.0.0.1:18885` plus the active private LAN IPv4 on port `18885`.
++The broker never binds a wildcard address. Its firewall rule is limited to the selected local
++address, `LocalSubnet`, the Mosquitto executable, and TCP port `18885`.
++
++Runtime passwords, broker files, data, logs, and generated `SecretsStage1.h` are Git-ignored.
++No account has ACL permission to write `stage1/hydroponic/device001/pump/cmd`. The backend also
++runs with `PUMP_COMMANDS_DISABLED=true`; Auto Dosing remains source-locked OFF.
++
++Set `STAGE1_WIFI_SSID` and `STAGE1_WIFI_PASSWORD` in the current PowerShell process before start
++only when preparing a later physical flash. Stage 1 Preflight itself does not upload or connect
++an ESP32.
++
++```powershell
++$env:STAGE1_WIFI_SSID = '<staging Wi-Fi SSID>'
++$env:STAGE1_WIFI_PASSWORD = '<staging Wi-Fi password>'
++.\Start-Stage1-Preflight.ps1
++node .\runStage1PreflightChecks.js
++.\Get-Stage1-Status.ps1
++.\Stop-Stage1-Preflight.ps1
++.\Reset-Stage1-Preflight.ps1
++```
++
++Firmware must be compiled with `HYDROPONIC_BUILD_PROFILE=1`. That profile uses the `stage1/`
++topics, never subscribes to pump commands, rejects Serial/MQTT actuator requests, and forces all
++pump GPIO outputs OFF in every loop iteration.
+diff --git a/03_Edge_Server/mqtt_backend/staging/stage1/Reset-Stage1-Preflight.ps1 b/03_Edge_Server/mqtt_backend/staging/stage1/Reset-Stage1-Preflight.ps1
+new file mode 100644
+index 0000000..3f93e45
+--- /dev/null
++++ b/03_Edge_Server/mqtt_backend/staging/stage1/Reset-Stage1-Preflight.ps1
+@@ -0,0 +1,13 @@
++$ErrorActionPreference = 'Stop'
++. (Join-Path $PSScriptRoot 'Stage1.Common.ps1')
++
++& (Join-Path $PSScriptRoot 'Stop-Stage1-Preflight.ps1')
++$paths = Get-Stage1Paths
++$stage1Root = [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\') + '\'
++$runtimeRoot = [IO.Path]::GetFullPath($paths.RuntimeRoot)
++if (-not $runtimeRoot.StartsWith($stage1Root, [StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetFileName($runtimeRoot) -ne '.stage1_runtime') {
++  throw "Unsafe Stage 1 reset target: $runtimeRoot"
++}
++if (Test-Path -LiteralPath $runtimeRoot) { Remove-Item -LiteralPath $runtimeRoot -Recurse -Force }
++if (Test-Path -LiteralPath $paths.FirmwareSecrets) { Remove-Item -LiteralPath $paths.FirmwareSecrets -Force }
++Write-Output 'Phase 22B Stage 1 runtime data and ignored firmware staging secret were reset.'
+diff --git a/03_Edge_Server/mqtt_backend/staging/stage1/Stage1.Common.ps1 b/03_Edge_Server/mqtt_backend/staging/stage1/Stage1.Common.ps1
+new file mode 100644
+index 0000000..5674a2f
+--- /dev/null
++++ b/03_Edge_Server/mqtt_backend/staging/stage1/Stage1.Common.ps1
+@@ -0,0 +1,84 @@
++Set-StrictMode -Version Latest
++
++$script:Stage1MongoPort = 27019
++$script:Stage1MqttPort = 18885
++$script:Stage1HttpPort = 3101
++$script:Stage1DatabaseName = 'hydroponic_stage1_preflight'
++$script:Stage1FirewallRule = 'Hydroponic Phase22B Stage1 MQTT'
++
++function Get-Stage1Paths {
++  $backendRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
++  $projectRoot = [IO.Path]::GetFullPath((Join-Path $backendRoot '..\..'))
++  $runtimeRoot = Join-Path $PSScriptRoot '.stage1_runtime'
++  return [pscustomobject]@{
++    BackendRoot = $backendRoot
++    ProjectRoot = $projectRoot
++    RuntimeRoot = $runtimeRoot
++    MongoData = Join-Path $runtimeRoot 'mongodb'
++    Logs = Join-Path $runtimeRoot 'logs'
++    Secrets = Join-Path $runtimeRoot 'secrets'
++    CredentialsFile = Join-Path $runtimeRoot 'secrets\credentials.json'
++    PasswordFile = Join-Path $runtimeRoot 'secrets\mosquitto.passwd'
++    AclFile = Join-Path $runtimeRoot 'mosquitto.stage1.acl'
++    MosquittoConfig = Join-Path $runtimeRoot 'mosquitto.stage1.conf'
++    StateFile = Join-Path $runtimeRoot 'processes.json'
++    FirmwareSecrets = Join-Path $projectRoot '02_ESP32_Main_Firmware\Hydroponic_Device001\SecretsStage1.h'
++  }
++}
++
++function Get-Stage1LanIPv4 {
++  $candidate = Get-NetIPConfiguration |
++    Where-Object { $_.NetAdapter.Status -eq 'Up' -and $_.IPv4DefaultGateway -and $_.InterfaceAlias -notmatch 'vEthernet|Loopback|Bluetooth' } |
++    ForEach-Object { $_.IPv4Address } |
++    Where-Object { $_.IPAddress -match '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)' } |
++    Select-Object -First 1
++  if (-not $candidate) {
++    throw 'No active private LAN IPv4 address with a default gateway was found.'
++  }
++  return $candidate.IPAddress
++}
++
++function Test-Stage1TcpPort {
++  param([Parameter(Mandatory)][string]$HostAddress, [Parameter(Mandatory)][int]$Port)
++  $client = [Net.Sockets.TcpClient]::new()
++  try {
++    $task = $client.ConnectAsync($HostAddress, $Port)
++    return $task.Wait(500) -and $client.Connected
++  } catch { return $false } finally { $client.Dispose() }
++}
++
++function Wait-Stage1TcpPort {
++  param([Parameter(Mandatory)][string]$HostAddress, [Parameter(Mandatory)][int]$Port, [int]$TimeoutSec = 30)
++  $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSec)
++  while ([DateTime]::UtcNow -lt $deadline) {
++    if (Test-Stage1TcpPort -HostAddress $HostAddress -Port $Port) { return }
++    Start-Sleep -Milliseconds 250
++  }
++  throw "Stage 1 service did not listen on ${HostAddress}:$Port within $TimeoutSec seconds"
++}
++
++function Find-Stage1MongoBinary {
++  $binary = Get-ChildItem -LiteralPath (Join-Path $env:ProgramFiles 'MongoDB\Server') -Filter mongod.exe -Recurse -ErrorAction SilentlyContinue |
++    Sort-Object FullName -Descending | Select-Object -First 1
++  if (-not $binary) { throw 'mongod.exe was not found under Program Files\MongoDB\Server' }
++  return $binary.FullName
++}
++
++function Find-Stage1MosquittoBinary {
++  param([string]$Name = 'mosquitto.exe')
++  $binary = Join-Path $env:ProgramFiles "Mosquitto\$Name"
++  if (-not (Test-Path -LiteralPath $binary)) { throw "$Name was not found under Program Files\Mosquitto" }
++  return $binary
++}
++
++function New-Stage1Secret {
++  $bytes = [byte[]]::new(32)
++  $generator = [Security.Cryptography.RandomNumberGenerator]::Create()
++  try { $generator.GetBytes($bytes) } finally { $generator.Dispose() }
++  return [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
++}
++
++function ConvertTo-Stage1CString {
++  param([Parameter(Mandatory)][string]$Value)
++  return $Value.Replace('\', '\\').Replace('"', '\"')
++}
+diff --git a/03_Edge_Server/mqtt_backend/staging/stage1/Start-Stage1-Preflight.ps1 b/03_Edge_Server/mqtt_backend/staging/stage1/Start-Stage1-Preflight.ps1
+new file mode 100644
+index 0000000..7538fc1
+--- /dev/null
++++ b/03_Edge_Server/mqtt_backend/staging/stage1/Start-Stage1-Preflight.ps1
+@@ -0,0 +1,153 @@
++$ErrorActionPreference = 'Stop'
++. (Join-Path $PSScriptRoot 'Stage1.Common.ps1')
++
++$paths = Get-Stage1Paths
++$lanAddress = Get-Stage1LanIPv4
++$started = @()
++$firewallCreated = $false
++
++foreach ($endpoint in @(
++  @{ Host = '127.0.0.1'; Port = $Stage1MongoPort },
++  @{ Host = '127.0.0.1'; Port = $Stage1MqttPort },
++  @{ Host = $lanAddress; Port = $Stage1MqttPort },
++  @{ Host = '127.0.0.1'; Port = $Stage1HttpPort }
++)) {
++  if (Test-Stage1TcpPort -HostAddress $endpoint.Host -Port $endpoint.Port) {
++    throw "Stage 1 endpoint $($endpoint.Host):$($endpoint.Port) is already in use."
++  }
++}
++
++New-Item -ItemType Directory -Force -Path $paths.MongoData, $paths.Logs, $paths.Secrets | Out-Null
++$mongoBinary = Find-Stage1MongoBinary
++$mosquittoBinary = Find-Stage1MosquittoBinary
++$passwordBinary = Find-Stage1MosquittoBinary -Name 'mosquitto_passwd.exe'
++$nodeBinary = (Get-Command node -ErrorAction Stop).Source
++
++try {
++  if (-not (Test-Path -LiteralPath $paths.CredentialsFile)) {
++    [ordered]@{
++      backend = [ordered]@{ username = 'stage1_backend'; password = New-Stage1Secret }
++      device = [ordered]@{ username = 'stage1_device'; password = New-Stage1Secret }
++      auditor = [ordered]@{ username = 'stage1_auditor'; password = New-Stage1Secret }
++    } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $paths.CredentialsFile -Encoding UTF8
++  }
++  $credentials = Get-Content -LiteralPath $paths.CredentialsFile -Raw | ConvertFrom-Json
++
++  if (Test-Path -LiteralPath $paths.PasswordFile) { Remove-Item -LiteralPath $paths.PasswordFile -Force }
++  & $passwordBinary -b -c $paths.PasswordFile $credentials.backend.username $credentials.backend.password | Out-Null
++  if ($LASTEXITCODE -ne 0) { throw 'Failed to create Stage 1 password file' }
++  foreach ($account in @($credentials.device, $credentials.auditor)) {
++    & $passwordBinary -b $paths.PasswordFile $account.username $account.password | Out-Null
++    if ($LASTEXITCODE -ne 0) { throw 'Failed to append Stage 1 password account' }
++  }
++
++  @"
++user $($credentials.backend.username)
++topic read stage1/hydroponic/device001/sensor
++topic read stage1/hydroponic/device001/pump/status
++
++user $($credentials.device.username)
++topic write stage1/hydroponic/device001/sensor
++topic write stage1/hydroponic/device001/pump/status
++
++user $($credentials.auditor.username)
++topic read stage1/hydroponic/device001/#
++topic write stage1/hydroponic/device001/sensor
++"@ | Set-Content -LiteralPath $paths.AclFile -Encoding ASCII
++
++  $passwordPath = $paths.PasswordFile.Replace('\', '/')
++  $aclPath = $paths.AclFile.Replace('\', '/')
++  @"
++per_listener_settings false
++allow_anonymous false
++password_file $passwordPath
++acl_file $aclPath
++listener $Stage1MqttPort 127.0.0.1
++listener $Stage1MqttPort $lanAddress
++"@ | Set-Content -LiteralPath $paths.MosquittoConfig -Encoding ASCII
++
++  Get-NetFirewallRule -DisplayName $Stage1FirewallRule -ErrorAction SilentlyContinue | Remove-NetFirewallRule
++  New-NetFirewallRule -DisplayName $Stage1FirewallRule -Direction Inbound -Action Allow -Protocol TCP `
++    -LocalAddress $lanAddress -LocalPort $Stage1MqttPort -RemoteAddress LocalSubnet `
++    -Program $mosquittoBinary -Profile Any | Out-Null
++  $firewallCreated = $true
++
++  $mongo = Start-Process -FilePath $mongoBinary -WindowStyle Hidden -PassThru -ArgumentList @(
++    '--bind_ip', '127.0.0.1', '--port', "$Stage1MongoPort", '--dbpath', $paths.MongoData,
++    '--logpath', (Join-Path $paths.Logs 'mongodb.log'), '--logappend'
++  )
++  $started += [pscustomobject]@{ Name='mongodb-stage1'; Pid=$mongo.Id; Path=$mongoBinary; StartedAtUtc=$mongo.StartTime.ToUniversalTime().ToString('o') }
++  Wait-Stage1TcpPort -HostAddress '127.0.0.1' -Port $Stage1MongoPort
++
++  $mosquitto = Start-Process -FilePath $mosquittoBinary -WindowStyle Hidden -PassThru -ArgumentList @('-c', $paths.MosquittoConfig, '-v') `
++    -RedirectStandardOutput (Join-Path $paths.Logs 'mosquitto.stdout.log') `
++    -RedirectStandardError (Join-Path $paths.Logs 'mosquitto.stderr.log')
++  $started += [pscustomobject]@{ Name='mqtt-stage1'; Pid=$mosquitto.Id; Path=$mosquittoBinary; StartedAtUtc=$mosquitto.StartTime.ToUniversalTime().ToString('o') }
++  Wait-Stage1TcpPort -HostAddress '127.0.0.1' -Port $Stage1MqttPort
++  Wait-Stage1TcpPort -HostAddress $lanAddress -Port $Stage1MqttPort
++
++  $stageEnvironment = [ordered]@{
++    NODE_ENV='staging'; SERVICE_NAME='hydroponic-stage1-preflight-backend'; HTTP_PORT="$Stage1HttpPort"; HTTP_HOST='127.0.0.1'
++    CORS_ORIGIN="http://127.0.0.1:$Stage1HttpPort"; MONGO_URI="mongodb://127.0.0.1:$Stage1MongoPort"; MONGO_DB_NAME=$Stage1DatabaseName
++    MQTT_URL="mqtt://127.0.0.1:$Stage1MqttPort"; MQTT_USERNAME=$credentials.backend.username; MQTT_PASSWORD=$credentials.backend.password
++    MQTT_TOPIC_SENSOR='stage1/hydroponic/device001/sensor'; MQTT_TOPIC_PUMP_CMD='stage1/hydroponic/device001/pump/cmd'
++    MQTT_TOPIC_PUMP_STATUS='stage1/hydroponic/device001/pump/status'; MQTT_TOPIC_ALERT='stage1/hydroponic/device001/alert'
++    SHADOW_MODE_ENABLED='true'; PUMP_COMMANDS_DISABLED='true'
++  }
++  $originalEnvironment = @{}
++  try {
++    foreach ($entry in $stageEnvironment.GetEnumerator()) {
++      $originalEnvironment[$entry.Key] = [Environment]::GetEnvironmentVariable($entry.Key, 'Process')
++      [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process')
++    }
++    $backend = Start-Process -FilePath $nodeBinary -WindowStyle Hidden -PassThru -WorkingDirectory $paths.BackendRoot -ArgumentList @('src/index.js') `
++      -RedirectStandardOutput (Join-Path $paths.Logs 'backend.stdout.log') `
++      -RedirectStandardError (Join-Path $paths.Logs 'backend.stderr.log')
++  } finally {
++    foreach ($entry in $originalEnvironment.GetEnumerator()) { [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process') }
++  }
++  $started += [pscustomobject]@{ Name='backend-stage1'; Pid=$backend.Id; Path=$nodeBinary; StartedAtUtc=$backend.StartTime.ToUniversalTime().ToString('o') }
++  Wait-Stage1TcpPort -HostAddress '127.0.0.1' -Port $Stage1HttpPort
++
++  $deadline = [DateTime]::UtcNow.AddSeconds(20)
++  do {
++    try { $health = Invoke-RestMethod -Uri "http://127.0.0.1:$Stage1HttpPort/health" -TimeoutSec 2 } catch { $health = $null }
++    if ($health -and $health.mongoConnected -eq $true -and $health.mqttConnected -eq $true) { break }
++    Start-Sleep -Milliseconds 300
++  } while ([DateTime]::UtcNow -lt $deadline)
++  if (-not $health -or $health.mongoConnected -ne $true -or $health.mqttConnected -ne $true) { throw 'Stage 1 backend health failed' }
++
++  $wifiConfigured = -not [string]::IsNullOrWhiteSpace($env:STAGE1_WIFI_SSID) -and -not [string]::IsNullOrWhiteSpace($env:STAGE1_WIFI_PASSWORD)
++  $wifiSsid = if ($wifiConfigured) { $env:STAGE1_WIFI_SSID } else { 'SET_STAGE1_WIFI_SSID_BEFORE_FLASH' }
++  $wifiPassword = if ($wifiConfigured) { $env:STAGE1_WIFI_PASSWORD } else { 'SET_STAGE1_WIFI_PASSWORD_BEFORE_FLASH' }
++  @"
++#ifndef SECRETS_STAGE1_H
++#define SECRETS_STAGE1_H
++#define WIFI_SSID "$(ConvertTo-Stage1CString $wifiSsid)"
++#define WIFI_PASSWORD "$(ConvertTo-Stage1CString $wifiPassword)"
++#define MQTT_HOST "$lanAddress"
++#define MQTT_PORT $Stage1MqttPort
++#define MQTT_USERNAME "$(ConvertTo-Stage1CString $credentials.device.username)"
++#define MQTT_PASSWORD "$(ConvertTo-Stage1CString $credentials.device.password)"
++#endif
++"@ | Set-Content -LiteralPath $paths.FirmwareSecrets -Encoding ASCII
++
++  [pscustomobject]@{
++    Stage='Phase22B-Stage1-Preflight'; StartedAtUtc=[DateTime]::UtcNow.ToString('o'); LanAddress=$lanAddress
++    MongoUri="mongodb://127.0.0.1:$Stage1MongoPort"; Database=$Stage1DatabaseName
++    MqttLoopbackUrl="mqtt://127.0.0.1:$Stage1MqttPort"; MqttLanUrl="mqtt://${lanAddress}:$Stage1MqttPort"
++    HttpUrl="http://127.0.0.1:$Stage1HttpPort"; Authentication=$true; PumpCommandsDisabled=$true
++    FirmwareWifiConfigured=$wifiConfigured; Processes=$started
++  } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $paths.StateFile -Encoding UTF8
++
++  Write-Output 'Phase 22B Stage 1 preflight started.'
++  Write-Output "MQTT listeners: 127.0.0.1:$Stage1MqttPort and ${lanAddress}:$Stage1MqttPort"
++  Write-Output "Dashboard: http://127.0.0.1:$Stage1HttpPort/"
++  Write-Output 'Authentication: REQUIRED; pump command publishing: DISABLED'
++  Write-Output "Firmware Wi-Fi secret configured: $wifiConfigured"
++} catch {
++  $reverse = @($started); [array]::Reverse($reverse)
++  foreach ($item in $reverse) { Stop-Process -Id $item.Pid -Force -ErrorAction SilentlyContinue }
++  if ($firewallCreated) { Get-NetFirewallRule -DisplayName $Stage1FirewallRule -ErrorAction SilentlyContinue | Remove-NetFirewallRule }
++  throw
++}
+diff --git a/03_Edge_Server/mqtt_backend/staging/stage1/Stop-Stage1-Preflight.ps1 b/03_Edge_Server/mqtt_backend/staging/stage1/Stop-Stage1-Preflight.ps1
+new file mode 100644
+index 0000000..5b70661
+--- /dev/null
++++ b/03_Edge_Server/mqtt_backend/staging/stage1/Stop-Stage1-Preflight.ps1
+@@ -0,0 +1,30 @@
++$ErrorActionPreference = 'Stop'
++. (Join-Path $PSScriptRoot 'Stage1.Common.ps1')
++
++$paths = Get-Stage1Paths
++if (-not (Test-Path -LiteralPath $paths.StateFile)) {
++  Get-NetFirewallRule -DisplayName $Stage1FirewallRule -ErrorAction SilentlyContinue | Remove-NetFirewallRule
++  Write-Output 'Phase 22B Stage 1 preflight is not recorded as running.'
++  exit 0
++}
++
++$state = Get-Content -LiteralPath $paths.StateFile -Raw | ConvertFrom-Json
++$errors = @()
++$reverse = @($state.Processes); [array]::Reverse($reverse)
++foreach ($item in $reverse) {
++  $process = Get-Process -Id $item.Pid -ErrorAction SilentlyContinue
++  if (-not $process) { continue }
++  $expectedStart = [DateTime]::Parse($item.StartedAtUtc).ToUniversalTime()
++  if ($process.Path -ne $item.Path -or [Math]::Abs(($process.StartTime.ToUniversalTime() - $expectedStart).TotalSeconds) -gt 1) {
++    $errors += "Refused to stop PID $($item.Pid): identity mismatch for $($item.Name)"
++    continue
++  }
++  Stop-Process -Id $item.Pid -Force
++  $process.WaitForExit(10000) | Out-Null
++}
++Get-NetFirewallRule -DisplayName $Stage1FirewallRule -ErrorAction SilentlyContinue | Remove-NetFirewallRule
++
++$state | Add-Member -NotePropertyName StoppedAtUtc -NotePropertyValue ([DateTime]::UtcNow.ToString('o')) -Force
++$state | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $paths.StateFile -Encoding UTF8
++if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }
++Write-Output 'Phase 22B Stage 1 preflight stopped and its scoped firewall rule was removed.'
+diff --git a/03_Edge_Server/mqtt_backend/staging/stage1/mosquitto.stage1.conf.example b/03_Edge_Server/mqtt_backend/staging/stage1/mosquitto.stage1.conf.example
+new file mode 100644
+index 0000000..3867ce2
+--- /dev/null
++++ b/03_Edge_Server/mqtt_backend/staging/stage1/mosquitto.stage1.conf.example
+@@ -0,0 +1,7 @@
++# The start script replaces placeholders in a Git-ignored runtime file.
++per_listener_settings false
++allow_anonymous false
++password_file RUNTIME_PASSWORD_FILE
++acl_file RUNTIME_ACL_FILE
++listener 18885 127.0.0.1
++listener 18885 PRIVATE_LAN_IPV4
+diff --git a/03_Edge_Server/mqtt_backend/staging/stage1/runStage1PreflightChecks.js b/03_Edge_Server/mqtt_backend/staging/stage1/runStage1PreflightChecks.js
+new file mode 100644
+index 0000000..0869742
+--- /dev/null
++++ b/03_Edge_Server/mqtt_backend/staging/stage1/runStage1PreflightChecks.js
+@@ -0,0 +1,143 @@
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const net = require('node:net');
++const path = require('node:path');
++
++const mqtt = require('mqtt');
++
++const RUNTIME = path.join(__dirname, '.stage1_runtime');
++function readRuntimeJson(fileName) {
++  return JSON.parse(fs.readFileSync(fileName, 'utf8').replace(/^\uFEFF/, ''));
++}
++
++const state = readRuntimeJson(path.join(RUNTIME, 'processes.json'));
++const credentials = readRuntimeJson(path.join(RUNTIME, 'secrets', 'credentials.json'));
++const TOPICS = Object.freeze({
++  sensor: 'stage1/hydroponic/device001/sensor',
++  pumpCommand: 'stage1/hydroponic/device001/pump/cmd',
++  pumpStatus: 'stage1/hydroponic/device001/pump/status',
++});
++
++function connect(options) {
++  return new Promise((resolve, reject) => {
++    const client = mqtt.connect(state.MqttLanUrl, { reconnectPeriod: 0, connectTimeout: 3000, ...options });
++    client.once('connect', () => resolve(client));
++    client.once('error', reject);
++  });
++}
++
++function close(client) {
++  return new Promise((resolve) => client.end(true, resolve));
++}
++
++async function assertAnonymousRejected() {
++  await new Promise((resolve, reject) => {
++    const client = mqtt.connect(state.MqttLanUrl, { reconnectPeriod: 0, connectTimeout: 2000 });
++    let connected = false;
++    client.once('connect', () => { connected = true; client.end(true); reject(new Error('Anonymous MQTT connection was accepted')); });
++    client.once('error', () => { if (!connected) { client.end(true); resolve(); } });
++    setTimeout(() => { client.end(true); connected ? reject(new Error('Anonymous connection unexpectedly connected')) : resolve(); }, 2500);
++  });
++}
++
++async function assertTcpReachable(host, port) {
++  await new Promise((resolve, reject) => {
++    const socket = net.createConnection({ host, port });
++    socket.setTimeout(2000);
++    socket.once('connect', () => { socket.destroy(); resolve(); });
++    socket.once('timeout', () => { socket.destroy(); reject(new Error(`Timeout reaching ${host}:${port}`)); });
++    socket.once('error', reject);
++  });
++}
++
++async function assertAclAndZeroCommandDelivery() {
++  const auditor = await connect({ username: credentials.auditor.username, password: credentials.auditor.password });
++  const device = await connect({ username: credentials.device.username, password: credentials.device.password });
++  const backend = await connect({ username: credentials.backend.username, password: credentials.backend.password });
++  let commandCount = 0;
++  try {
++    await new Promise((resolve, reject) => auditor.subscribe(TOPICS.pumpCommand, { qos: 1 }, (error) => error ? reject(error) : resolve()));
++    auditor.on('message', (topic) => { if (topic === TOPICS.pumpCommand) commandCount += 1; });
++
++    // Mosquitto 2.x may acknowledge the filter and enforce read ACL at delivery time.
++    await new Promise((resolve, reject) => device.subscribe(TOPICS.pumpCommand, { qos: 1 }, (error) => error ? reject(error) : resolve()));
++
++    const forbiddenPayload = JSON.stringify({ commandId: 'must_not_deliver', deviceId: 'device001', pump: 'A', action: 'pulse', durationMs: 500 });
++    device.publish(TOPICS.pumpCommand, forbiddenPayload, { qos: 1 });
++    backend.publish(TOPICS.pumpCommand, forbiddenPayload, { qos: 1 });
++    await new Promise((resolve) => setTimeout(resolve, 500));
++    assert.equal(commandCount, 0);
++  } finally {
++    await Promise.all([close(auditor), close(device), close(backend)]);
++  }
++  return commandCount;
++}
++
++function assertTopicParityAndSafetyFiles() {
++  const projectRoot = path.resolve(__dirname, '../../../..');
++  const firmwareDir = path.join(projectRoot, '02_ESP32_Main_Firmware', 'Hydroponic_Device001');
++  const config = fs.readFileSync(path.join(firmwareDir, 'Config.h'), 'utf8');
++  const profile = fs.readFileSync(path.join(firmwareDir, 'BuildProfile.h'), 'utf8');
++  const mqttSource = fs.readFileSync(path.join(firmwareDir, 'MqttService.cpp'), 'utf8');
++  const pumpsSource = fs.readFileSync(path.join(firmwareDir, 'Pumps.cpp'), 'utf8');
++  const firmware = fs.readFileSync(path.join(firmwareDir, 'Hydroponic_Device001.ino'), 'utf8');
++  const acl = fs.readFileSync(path.join(RUNTIME, 'mosquitto.stage1.acl'), 'utf8');
++  const brokerConfig = fs.readFileSync(path.join(RUNTIME, 'mosquitto.stage1.conf'), 'utf8');
++
++  for (const topic of Object.values(TOPICS)) assert.ok(config.includes(`\"${topic}\"`), `Firmware topic missing: ${topic}`);
++  assert.match(profile, /ACTUATORS_LOCKED = true/);
++  assert.match(profile, /MQTT_PUMP_COMMANDS_ENABLED = false/);
++  assert.match(mqttSource, /if \(MQTT_PUMP_COMMANDS_ENABLED\)/);
++  assert.match(pumpsSource, /actuatorEffectiveState/);
++  assert.match(pumpsSource, /enforceActuatorSafetyLock/);
++  assert.match(firmware, /ACTUATORS_LOCKED && isSerialActuatorCommand/);
++  assert.match(firmware, /if \(!MQTT_PUMP_COMMANDS_ENABLED\)/);
++  assert.doesNotMatch(acl, /topic\s+write\s+stage1\/hydroponic\/device001\/pump\/cmd/);
++  assert.match(brokerConfig, /allow_anonymous false/);
++  assert.doesNotMatch(brokerConfig, /listener\s+\d+\s+(0\.0\.0\.0|::)/);
++}
++
++async function main() {
++  assert.match(state.LanAddress, /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/);
++  assert.equal(state.Authentication, true);
++  assert.equal(state.PumpCommandsDisabled, true);
++  assert.notEqual(new URL(state.MongoUri).port, '27017');
++  assert.notEqual(new URL(state.MqttLanUrl).port, '1883');
++  assertTopicParityAndSafetyFiles();
++  await assertTcpReachable('127.0.0.1', 18885);
++  await assertTcpReachable(state.LanAddress, 18885);
++  await assertAnonymousRejected();
++  const forbiddenPumpCommandsDelivered = await assertAclAndZeroCommandDelivery();
++
++  process.env.STAGING_CHECK_NAME = 'stage1';
++  process.env.STAGING_SERVICE_NAME = 'hydroponic-stage1-preflight-backend';
++  process.env.STAGING_MONGO_URI = state.MongoUri;
++  process.env.STAGING_DATABASE_NAME = state.Database;
++  process.env.STAGING_MQTT_URL = state.MqttLanUrl;
++  process.env.STAGING_MQTT_USERNAME = credentials.auditor.username;
++  process.env.STAGING_MQTT_PASSWORD = credentials.auditor.password;
++  process.env.STAGING_HTTP_URL = state.HttpUrl;
++  process.env.STAGING_SENSOR_TOPIC = TOPICS.sensor;
++  process.env.STAGING_PUMP_COMMAND_TOPIC = TOPICS.pumpCommand;
++
++  const { main: runIntegrationChecks } = require('../runStage0Checks');
++  await runIntegrationChecks();
++  console.log(JSON.stringify({
++    result: 'PASS',
++    lanMqttEndpoint: state.MqttLanUrl,
++    loopbackMqttEndpoint: state.MqttLoopbackUrl,
++    database: state.Database,
++    httpUrl: state.HttpUrl,
++    topics: TOPICS,
++    anonymousRejected: true,
++    devicePumpCommandDeliveryDenied: true,
++    forbiddenPumpCommandsDelivered,
++    firmwareActuatorLockContract: 'PASS',
++    productionEndpointsAccessed: 0,
++  }, null, 2));
++}
++
++main().catch((error) => {
++  console.error(`Phase 22B Stage 1 preflight check failed: ${error.stack || error.message}`);
++  process.exitCode = 1;
++});
+diff --git a/03_Edge_Server/mqtt_backend/test/fixtures/stage1_actuator_lock_host_test.cpp b/03_Edge_Server/mqtt_backend/test/fixtures/stage1_actuator_lock_host_test.cpp
+new file mode 100644
+index 0000000..e6a9644
+--- /dev/null
++++ b/03_Edge_Server/mqtt_backend/test/fixtures/stage1_actuator_lock_host_test.cpp
+@@ -0,0 +1,16 @@
++#define HYDROPONIC_BUILD_PROFILE 1
++
++#include <cassert>
++
++#include "ActuatorSafety.h"
++
++int main() {
++  static_assert(ACTUATORS_LOCKED, "USB Stage 1 must lock actuators");
++  static_assert(!MQTT_PUMP_COMMANDS_ENABLED, "USB Stage 1 must not subscribe pump commands");
++  static_assert(!actuatorOnRequestAllowed(true), "ON requests must fail closed");
++  static_assert(!actuatorEffectiveState(true), "ON requests must resolve to OFF");
++  static_assert(actuatorOnRequestAllowed(false), "OFF requests remain safe");
++  assert(!actuatorEffectiveState(true));
++  assert(!actuatorEffectiveState(false));
++  return 0;
++}
+diff --git a/03_Edge_Server/mqtt_backend/test/stage1PreflightSafety.test.js b/03_Edge_Server/mqtt_backend/test/stage1PreflightSafety.test.js
+new file mode 100644
+index 0000000..d37a7a0
+--- /dev/null
++++ b/03_Edge_Server/mqtt_backend/test/stage1PreflightSafety.test.js
+@@ -0,0 +1,71 @@
++process.env.NODE_ENV = 'test';
++
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++const { spawnSync } = require('node:child_process');
++
++const projectRoot = path.resolve(__dirname, '../../..');
++const firmwareDir = path.join(projectRoot, '02_ESP32_Main_Firmware', 'Hydroponic_Device001');
++const stage1Dir = path.join(__dirname, '..', 'staging', 'stage1');
++
++test('USB Stage 1 topics match backend staging topics', () => {
++  const config = fs.readFileSync(path.join(firmwareDir, 'Config.h'), 'utf8');
++  const envExample = fs.readFileSync(path.join(stage1Dir, '.env.stage1.example'), 'utf8');
++  for (const topic of [
++    'stage1/hydroponic/device001/sensor',
++    'stage1/hydroponic/device001/pump/cmd',
++    'stage1/hydroponic/device001/pump/status',
++    'stage1/hydroponic/device001/alert',
++  ]) {
++    assert.ok(config.includes(topic));
++    assert.ok(envExample.includes(topic));
++  }
++});
++
++test('Stage 1 broker template requires authentication and has no wildcard bind', () => {
++  const broker = fs.readFileSync(path.join(stage1Dir, 'mosquitto.stage1.conf.example'), 'utf8');
++  assert.match(broker, /allow_anonymous false/);
++  assert.match(broker, /listener 18885 127\.0\.0\.1/);
++  assert.match(broker, /listener 18885 PRIVATE_LAN_IPV4/);
++  assert.doesNotMatch(broker, /0\.0\.0\.0|listener\s+\d+\s+::/);
++});
++
++test('firmware source contains independent subscription, Serial, local, and GPIO locks', () => {
++  const profile = fs.readFileSync(path.join(firmwareDir, 'BuildProfile.h'), 'utf8');
++  const mqttService = fs.readFileSync(path.join(firmwareDir, 'MqttService.cpp'), 'utf8');
++  const pumps = fs.readFileSync(path.join(firmwareDir, 'Pumps.cpp'), 'utf8');
++  const firmware = fs.readFileSync(path.join(firmwareDir, 'Hydroponic_Device001.ino'), 'utf8');
++  assert.match(profile, /ACTUATORS_LOCKED = true/);
++  assert.match(profile, /MQTT_PUMP_COMMANDS_ENABLED = false/);
++  assert.match(mqttService, /if \(MQTT_PUMP_COMMANDS_ENABLED\)/);
++  assert.match(firmware, /ACTUATORS_LOCKED && isSerialActuatorCommand/);
++  assert.match(firmware, /if \(ACTUATORS_LOCKED\)[\s\S]*enforceActuatorSafetyLock\(\)/);
++  assert.match(pumps, /actuatorEffectiveState\(on\)/);
++  assert.match(pumps, /writePumpOutput\(PIN_PUMP_MAIN, false\)/);
++  assert.match(pumps, /writePumpOutput\(PIN_PUMP_A, false\)/);
++  assert.match(pumps, /writePumpOutput\(PIN_PUMP_B, false\)/);
++});
++
++test('Stage 1 actuator lock executes in a native host harness', (t) => {
++  const compiler = spawnSync('g++', ['--version'], { encoding: 'utf8' });
++  if (compiler.status !== 0) { t.skip('g++ is unavailable'); return; }
++  const fixture = path.join(__dirname, 'fixtures', 'stage1_actuator_lock_host_test.cpp');
++  const executable = path.join(os.tmpdir(), `stage1-actuator-lock-${process.pid}.exe`);
++  const build = spawnSync('g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-I', firmwareDir, fixture, '-o', executable], { encoding: 'utf8' });
++  assert.equal(build.status, 0, build.stderr || build.stdout);
++  const run = spawnSync(executable, [], { encoding: 'utf8' });
++  fs.rmSync(executable, { force: true });
++  assert.equal(run.status, 0, run.stderr || run.stdout);
++});
++
++test('backend retains both pump command locks', () => {
++  const mqttClient = fs.readFileSync(path.join(__dirname, '..', 'src', 'mqttClient.js'), 'utf8');
++  const pumpService = fs.readFileSync(path.join(__dirname, '..', 'src', 'services', 'pumpCommandService.js'), 'utf8');
++  assert.match(mqttClient, /PUMP_COMMANDS_DISABLED/);
++  assert.match(mqttClient, /Pump command publishing is disabled/);
++  assert.match(pumpService, /pumpCommandsDisabled\(\)/);
++  assert.match(pumpService, /pump_commands_disabled/);
++});
+diff --git a/CODEX_PHASE22B_STAGE1_PREFLIGHT_REPORT.md b/CODEX_PHASE22B_STAGE1_PREFLIGHT_REPORT.md
+new file mode 100644
+index 0000000..9601936
+--- /dev/null
++++ b/CODEX_PHASE22B_STAGE1_PREFLIGHT_REPORT.md
+@@ -0,0 +1,254 @@
++# CODEX PHASE 22B STAGE 1 PREFLIGHT REPORT
++
++## 1. Conclusion
++
++**PARTIAL**
++
++The isolated Stage 1 MongoDB, authenticated MQTT broker, backend, Shadow Mode, API, and
++Dashboard started and passed real runtime checks. Firmware/backend topics match, all actuator
++locks passed source/native tests, and the complete USB Stage 1 firmware profile compiled.
++
++`READY_FOR_PHYSICAL_USB_STAGE1` is intentionally not claimed because staging Wi-Fi SSID and
++password were not available (`FirmwareWifiConfigured=false`). The LAN MQTT test used the
++machine's private IPv4 from a client on the same machine; no ESP32 or second physical Wi-Fi
++peer was connected. Firmware was not uploaded.
++
++## 2. Implemented Scope
++
++| Requirement | Status | Result |
++|---|---|---|
++| Loopback plus exact private LAN bind | Complete | MQTT listens only on `127.0.0.1:18885` and `192.168.1.90:18885`. |
++| No wildcard bind | Complete | No `0.0.0.0` or `::` listener; runtime listener count on forbidden addresses was zero. |
++| Broker authentication and ACL | Complete | Anonymous connection rejected; unauthorized pump-command publishes denied. |
++| Runtime-only credentials | Complete | Generated under ignored `.stage1_runtime/secrets/`; generated firmware secret is ignored. |
++| Firmware staging profile and topic parity | Complete | Compile profile `HYDROPONIC_BUILD_PROFILE=1` uses `stage1/` topics and port `18885`. |
++| Firmware actuator lock | Complete | No MQTT command subscription; MQTT/Serial/local ON paths blocked; all outputs forced OFF. |
++| Preserve backend publisher/service locks | Complete | `PUMP_COMMANDS_DISABLED=true`; both existing source checks retained. |
++| Real isolated staging checks | Complete | MongoDB, MQTT, backend, Shadow, API, Dashboard and lifecycle checks passed. |
++| Zero pump command / zero dosing run | Complete | Zero delivered command, zero `dosing_runs`, zero `pump_logs`; Auto Dosing false. |
++| Full staging-profile firmware compile | Complete | Exit 0; flash/RAM reported below. |
++| Physical ESP32 Wi-Fi route | Unverified | Wi-Fi secret not configured; no upload, USB connection, or hardware test. |
++
++## 3. Runtime Topology
++
++| Component | Actual endpoint | Exposure |
++|---|---|---|
++| MongoDB | `mongodb://127.0.0.1:27019/hydroponic_stage1_preflight` | Loopback only |
++| MQTT | `mqtt://127.0.0.1:18885` | Loopback authenticated listener |
++| MQTT LAN | `mqtt://192.168.1.90:18885` | Exact private IPv4, authenticated, ACL protected |
++| Backend/Dashboard | `http://127.0.0.1:3101` | Loopback only |
++
++The scoped Windows Firewall rule permits only Mosquitto TCP port `18885`, local address
++`192.168.1.90`, and `LocalSubnet`. The stop/reset scripts remove this rule.
++
++Actual firmware/backend topics:
++
++- Sensor: `stage1/hydroponic/device001/sensor`
++- Pump command identifier: `stage1/hydroponic/device001/pump/cmd`
++- Pump status: `stage1/hydroponic/device001/pump/status`
++- Alert: `stage1/hydroponic/device001/alert`
++
++The command topic exists as a parity identifier, but the firmware profile does not subscribe
++to it and no Stage 1 ACL account can write it.
++
++## 4. Start, Stop, Status, Reset
++
++```powershell
++cd 03_Edge_Server\mqtt_backend\staging\stage1
++.\Start-Stage1-Preflight.ps1
++node .\runStage1PreflightChecks.js
++.\Get-Stage1-Status.ps1
++.\Stop-Stage1-Preflight.ps1
++.\Reset-Stage1-Preflight.ps1
++```
++
++For a later physical flash, set `STAGE1_WIFI_SSID` and `STAGE1_WIFI_PASSWORD` only in the
++current process before start. Values must never be committed or copied into a report.
++
++Stop/reset/start was executed successfully. Reset removed runtime data and the generated
++firmware secret; restart regenerated isolated credentials/configuration and the complete
++Stage 1 integration test passed again. The final staging stack was left running for inspection.
++
++## 5. Authentication And ACL Evidence
++
++Runtime checks through `mqtt://192.168.1.90:18885` established:
++
++- Anonymous connection: rejected (`not authorised`).
++- Authenticated backend/device/auditor connections: accepted.
++- Device and backend attempts to publish Pump A command: broker logged two `Denied PUBLISH` events.
++- Messages delivered on pump-command topic: `0`.
++- Generated ACL contains no `topic write stage1/hydroponic/device001/pump/cmd` grant.
++- Broker listener config has `allow_anonymous false`.
++
++Mosquitto 2.1 may acknowledge a subscription filter and enforce read ACL at delivery time;
++therefore the executable assertion is zero command delivery, not SUBACK value alone.
++
++## 6. Actuator Lock Evidence
++
++Four independent controls are present:
++
++1. Build profile sets `ACTUATORS_LOCKED=true` and `MQTT_PUMP_COMMANDS_ENABLED=false`.
++2. MQTT subscribe is conditional and disabled in USB Stage 1.
++3. MQTT and Serial actuator handlers reject commands while the lock is active.
++4. `Pumps.cpp` converts every ON request to OFF and rewrites Main/A/B/spare OFF each loop.
++
++The native C++ harness compiled and executed with `HYDROPONIC_BUILD_PROFILE=1`; all compile-time
++and runtime assertions passed. The Arduino full-profile build also passed. No output pin was
++physically measured because no ESP32 or hardware was connected.
++
++Important source references:
++
++- `02_ESP32_Main_Firmware/Hydroponic_Device001/BuildProfile.h:11`
++- `02_ESP32_Main_Firmware/Hydroponic_Device001/Config.h:44`
++- `02_ESP32_Main_Firmware/Hydroponic_Device001/MqttService.cpp:82`
++- `02_ESP32_Main_Firmware/Hydroponic_Device001/Pumps.cpp:31`
++- `02_ESP32_Main_Firmware/Hydroponic_Device001/Pumps.cpp:69`
++- `02_ESP32_Main_Firmware/Hydroponic_Device001/Hydroponic_Device001.ino:525`
++- `02_ESP32_Main_Firmware/Hydroponic_Device001/Hydroponic_Device001.ino:633`
++- `02_ESP32_Main_Firmware/Hydroponic_Device001/Hydroponic_Device001.ino:775`
++- `03_Edge_Server/mqtt_backend/src/mqttClient.js:101`
++- `03_Edge_Server/mqtt_backend/src/services/pumpCommandService.js:73`
++
++## 7. Tests And Build
++
++### Full regression
++
++Command:
++
++```powershell
++cd 03_Edge_Server\mqtt_backend
++npm test
++```
++
++Result: `180` passed, `0` failed, `0` skipped, exit code `0`.
++
++### JavaScript syntax
++
++Command pattern:
++
++```powershell
++Get-ChildItem -Recurse -File -Filter *.js | ... | ForEach-Object { node --check $_.FullName }
++```
++
++Result: `47` files checked, `0` failures, exit code `0`.
++
++### Real Stage 1 integration
++
++Command:
++
++```powershell
++npm run stage1:test
++```
++
++Result after lifecycle reset: PASS, exit code `0`.
++
++- Sensor logs: `9`
++- Shadow decisions: `7`
++- Stability distinct measurements: `3`
++- Duplicate/retry idempotency: PASS
++- Out-of-order and delayed retry: PASS
++- Boot transition: PASS
++- Dashboard/API HTTP status: `200`
++- Auto Dosing enabled: `false`
++- Pump commands observed/delivered: `0`
++- Dosing runs: `0`
++- Pump logs: `0`
++- Production endpoints accessed: `0`
++
++### PowerShell and lifecycle
++
++All five Stage 1 PowerShell files parsed without errors. Start, status, stop, reset, restart,
++and post-reset integration test passed. Active listeners after restart were exactly:
++
++```text
++127.0.0.1:27019
++127.0.0.1:3101
++127.0.0.1:18885
++192.168.1.90:18885
++```
++
++### Full firmware compile
++
++Command:
++
++```powershell
++arduino-cli compile `
++  --fqbn "esp32:esp32:esp32:UploadSpeed=921600,CPUFreq=240,FlashFreq=80,FlashMode=qio,FlashSize=4M,PartitionScheme=default,DebugLevel=none,PSRAM=disabled,LoopCore=1,EventsCore=1,EraseFlash=none,JTAGAdapter=default,ZigbeeMode=default" `
++  --build-path D:\Hydroponic_PHASE22B_STAGE1_BUILD_20260810 `
++  --build-property "compiler.cpp.extra_flags=-DHYDROPONIC_BUILD_PROFILE=1" `
++  02_ESP32_Main_Firmware\Hydroponic_Device001
++```
++
++Toolchain: Arduino CLI `1.5.1`, ESP32 core `3.3.10`.
++
++Result: exit code `0`.
++
++- Flash: `938548 / 1310720` bytes (`71%`)
++- Static RAM: `47208 / 327680` bytes (`14%`)
++- Remaining dynamic memory: `280472` bytes
++
++The ignored firmware staging secret used generated broker credentials and placeholder Wi-Fi
++values because staging Wi-Fi credentials were not supplied. Compile success is not a physical
++network test. No upload command was run.
++
++## 8. Files Created Or Modified
++
++| File | Change and purpose |
++|---|---|
++| `.gitignore` | Ignores Stage 1 runtime and firmware secret. |
++| `README.md` | Documents Stage 1 topology, compile result, and lifecycle. |
++| `00_Docs/PROJECT_STATUS_REPORT.md` | Records Stage 1 partial status and physical blocker. |
++| `00_Docs/Telemetry_Identity_Shadow_Mode.md` | Adds Stage 1 runtime/compile status. |
++| `02_ESP32_Main_Firmware/Hydroponic_Device001/BuildProfile.h` | Defines operational and USB Stage 1 profiles. |
++| `02_ESP32_Main_Firmware/Hydroponic_Device001/ActuatorSafety.h` | Pure fail-closed actuator state helper. |
++| `02_ESP32_Main_Firmware/Hydroponic_Device001/Config.h` | Selects isolated topics/client ID by profile. |
++| `02_ESP32_Main_Firmware/Hydroponic_Device001/SecretsStage1.h.example` | Secret-free profile template. |
++| `02_ESP32_Main_Firmware/Hydroponic_Device001/MqttService.cpp` | Selects Stage 1 secret and disables command subscription. |
++| `02_ESP32_Main_Firmware/Hydroponic_Device001/Pumps.h` | Exposes lock enforcement function. |
++| `02_ESP32_Main_Firmware/Hydroponic_Device001/Pumps.cpp` | Forces all ON requests and outputs OFF in Stage 1. |
++| `02_ESP32_Main_Firmware/Hydroponic_Device001/Hydroponic_Device001.ino` | Rejects MQTT/Serial/local actuation and maintains OFF. |
++| `03_Edge_Server/mqtt_backend/package.json` | Adds `stage1:test` command. |
++| `03_Edge_Server/mqtt_backend/staging/runStage0Checks.js` | Makes the proven integration harness configurable while preserving Stage 0 defaults. |
++| `03_Edge_Server/mqtt_backend/staging/stage1/.env.stage1.example` | Secret-free backend staging variables. |
++| `03_Edge_Server/mqtt_backend/staging/stage1/mosquitto.stage1.conf.example` | Authenticated dual-address broker template. |
++| `03_Edge_Server/mqtt_backend/staging/stage1/Stage1.Common.ps1` | Paths, LAN discovery, ports, binaries, and secret helpers. |
++| `03_Edge_Server/mqtt_backend/staging/stage1/Start-Stage1-Preflight.ps1` | Generates credentials/ACL/config, scoped firewall, secret, and starts services. |
++| `03_Edge_Server/mqtt_backend/staging/stage1/Stop-Stage1-Preflight.ps1` | Identity-safe process stop and firewall cleanup. |
++| `03_Edge_Server/mqtt_backend/staging/stage1/Reset-Stage1-Preflight.ps1` | Checked runtime and generated-secret reset. |
++| `03_Edge_Server/mqtt_backend/staging/stage1/Get-Stage1-Status.ps1` | Reports loopback/LAN health without credentials. |
++| `03_Edge_Server/mqtt_backend/staging/stage1/runStage1PreflightChecks.js` | Real auth/ACL, telemetry, Shadow, API/Dashboard, and zero-side-effect checks. |
++| `03_Edge_Server/mqtt_backend/staging/stage1/README.md` | Stage 1 operator instructions and safety contract. |
++| `03_Edge_Server/mqtt_backend/test/fixtures/stage1_actuator_lock_host_test.cpp` | Native profile lock assertions. |
++| `03_Edge_Server/mqtt_backend/test/stage1PreflightSafety.test.js` | Topic, broker, firmware lock, and backend lock regression tests. |
++| `CODEX_PHASE22B_STAGE1_PREFLIGHT_REPORT.md` | This consolidated handoff report. |
++| `CODEX_PHASE22B_STAGE1_PREFLIGHT.patch` | Secret-safe source patch generated from the pre-Stage-1 baseline. |
++
++## 9. Production Isolation And Mandatory Safety Confirmations
++
++- No production database was contacted. Port `27017` was explicitly excluded; staging used `27019`.
++- No production broker was contacted. Port `1883` was explicitly excluded; staging used `18885`.
++- No production credential was read, copied, logged, or placed in this report.
++- No MQTT pump command was successfully published or delivered.
++- Auto Dosing remained OFF and enable attempts were rejected.
++- No dosing run or pump log was created.
++- No calibration set was activated or retired.
++- No firmware upload was attempted.
++- No ESP32, pump, sensor, nutrient bottle, or other hardware was connected or operated.
++- No ZIP was created.
++
++## 10. Remaining Risks And Next Step
++
++1. Configure a dedicated staging Wi-Fi SSID/password in process-only environment variables,
++   restart Stage 1, and verify `FirmwareWifiConfigured=true` without exposing values.
++2. On a supervised physical USB session, compile the same profile, upload it, and confirm its
++   startup reports `USB_STAGE1`, command subscription `DISABLED`, and actuator lock `ON`.
++3. With pumps physically disconnected, verify ESP32 telemetry reaches the LAN broker and the
++   Dashboard while all Main/A/B GPIO outputs remain electrically OFF.
++4. Repeat unauthorized MQTT and Serial command attempts while measuring outputs. Only after
++   this physical evidence may the status advance beyond `PARTIAL`.
++
++## 11. Secret Review
++
++The tracked source, this report, and the patch contain no runtime password, Wi-Fi password,
++token, MongoDB credential, or production endpoint. Runtime credentials remain only in ignored
++files. The patch excludes `.stage1_runtime/`, `Secrets.h`, and `SecretsStage1.h`.
+diff --git a/README.md b/README.md
+index 4655904..5120cbe 100644
+--- a/README.md
++++ b/README.md
+@@ -5,19 +5,19 @@ DS18B20 water temperature, water-level interlocks, MQTT, a local Edge Server, an
+ 
+ ## Current Phase
+ 
+-Phase 22B Stage 0 provides an isolated local staging stack for MongoDB, MQTT, the backend,
+-Shadow Mode, APIs, and the Dashboard. It uses loopback-only ports and `stage0/` MQTT topics,
+-contains no production credential, keeps Auto Dosing hard-locked OFF, and disables both
+-manual pump service paths and the MQTT pump publisher through
+-`PUMP_COMMANDS_DISABLED=true`.
++Phase 22B Stage 1 Preflight adds an authenticated LAN-reachable MQTT profile without exposing
++MongoDB or the backend beyond loopback. Firmware compiled with the USB Stage 1 profile uses
++`stage1/` topics, never subscribes to pump commands, rejects Serial/MQTT actuator requests,
++and continuously forces every pump output OFF. Auto Dosing and both backend pump publisher
++paths remain locked.
+ 
+ Phase 22A Fix 2 is the staging baseline. It preserves Telemetry Identity V2, duplicate and
+ order protection, three-distinct-measurement stability, and side-effect-free Shadow Mode.
+ Fix 2 also makes concurrent expired processing-lease recovery single-owner and idempotent.
+ 
+-The full Phase 22A Fix 2 firmware compiled successfully with Arduino CLI 1.5.1, ESP32 core
+-3.3.10, and the verified Arduino IDE FQBN: flash 943700 bytes (71%) and static RAM 47208
+-bytes (14%). Firmware was not uploaded. Stage 0 does not require an ESP32 or hardware.
++The full USB Stage 1 firmware profile compiled successfully with Arduino CLI 1.5.1 and ESP32
++core 3.3.10: flash 938548 bytes (71%) and static RAM 47208 bytes (14%). Firmware was not
++uploaded and no ESP32 or hardware was connected.
+ 
+ Phase 21 hardens EC/TDS calibration and Auto Dosing safety. Calibration is EC-first,
+ uses explicit `draft -> active -> retired` sets, and converts EC to TDS with scale 500
+@@ -82,6 +82,24 @@ powershell -ExecutionPolicy Bypass -File .\staging\Reset-Staging.ps1
+ See `03_Edge_Server/mqtt_backend/staging/README.md` for the isolation contract, topics,
+ repeatable lifecycle commands, and executable Stage 0 coverage.
+ 
++## Phase 22B Stage 1 Preflight
++
++Stage 1 uses MongoDB `127.0.0.1:27019`, backend/Dashboard `127.0.0.1:3101`, and authenticated
++MQTT on `127.0.0.1:18885` plus the selected private LAN IPv4 on port `18885`. The generated
++broker runtime config, credentials, data, logs, and `SecretsStage1.h` are ignored by Git.
++
++```powershell
++cd 03_Edge_Server\mqtt_backend\staging\stage1
++.\Start-Stage1-Preflight.ps1
++node .\runStage1PreflightChecks.js
++.\Get-Stage1-Status.ps1
++.\Stop-Stage1-Preflight.ps1
++.\Reset-Stage1-Preflight.ps1
++```
++
++Set `STAGE1_WIFI_SSID` and `STAGE1_WIFI_PASSWORD` only in the current process before start
++when preparing a physical Stage 1 flash. Do not commit or report their values.
++
+ See `00_Docs/Telemetry_Identity_Shadow_Mode.md` for the V2 payload, boot transition,
+ duplicate/order policy, Shadow gates, indexes, and read-only APIs.
+ 

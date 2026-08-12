@@ -1,12 +1,24 @@
 {
+  "schemaVersion": 2,
   "deviceId": "device001",
+  "bootId": "a1b2c3d4e5f60718",
+  "measurementSeq": 42,
+  "measurementId": "device001:a1b2c3d4e5f60718:42",
+  "sampledAtUptimeMs": 123456,
   "tdsRaw": 1830,
-  "tdsPpm": 650,
+  "tdsVoltage": 1.475,
+  "tdsMin": 1815,
+  "tdsMax": 1844,
+  "tdsSampleCount": 30,
+  "tdsSpreadRaw": 29,
+  "tdsWindowStable": true,
   "waterTemp": 26.4,
+  "waterTempValid": true,
   "waterLevel": "normal",
   "pumpMain": false,
   "pumpA": false,
   "pumpB": false,
+  "pumpSpare": false,
   "ph": null,
-  "createdAt": "2026-06-12T10:30:00+07:00"
+  "uptimeMs": 123456
 }
