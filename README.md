@@ -5,13 +5,14 @@ DS18B20 water temperature, water-level interlocks, MQTT, a local Edge Server, an
 
 ## Current Phase
 
-Phase 23B network transition is in progress. The Stage 1 firmware now uses a nonblocking Wi-Fi
+Phase 23B network transition is complete. The Stage 1 firmware now uses a nonblocking Wi-Fi
 retry state machine: one connection attempt may run for 30 seconds, then the STA is reset and
 allowed to settle for one second before credentials are applied again. Disconnect reason codes
-are printed for diagnosis. Source preflight, full backend regression (219/219), and a clean
-`USB_STAGE1` compile pass. The first target access point was reachable but its WPA handshake
-timed out at the ESP32, so the final runtime verification is waiting for the nearer previously
-verified hotspot. Auto Dosing and every actuator path remain locked OFF.
+are printed for diagnosis. Source preflight, full backend regression (219/219), a clean
+`USB_STAGE1` compile, final COM5 upload, authenticated MQTT telemetry, boot transition, three
+distinct accepted measurements, and real Dashboard `connected-fresh` verification pass on the
+nearby hotspot. Auto Dosing and every actuator path remain locked OFF; physical runtime created
+zero pump commands, pump logs, and dosing runs.
 
 Phase 23A is complete and hardens the verified Phase 22B baseline for repeatable local demonstrations. The
 launcher now requires API, MongoDB, and MQTT health before reporting ready. The Dashboard

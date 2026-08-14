@@ -2,13 +2,13 @@
 
 ## 1. Last Updated
 
-- Date: 2026-08-14
+- Date: 2026-08-15
 - Updated by: Codex
 
 ## 2. Current Project Phase
 
-- Current phase: Phase 23B - Stage 1 Network Transition In Progress
-- Short description: Stage 1 was prepared for a new LAN with authenticated MQTT and actuator lock. The distant AP reached WPA association but timed out during the handshake, so the final runtime will use the nearer previously verified hotspot. Wi-Fi retry hardening, preflight, regression, and firmware compile pass; final hotspot upload/runtime verification is pending. Auto Dosing remains OFF.
+- Current phase: Phase 23B - Stage 1 Network Transition Complete
+- Short description: Nonblocking Wi-Fi recovery, authenticated hotspot MQTT, actuator-locked COM5 upload, Telemetry Identity V2 boot transition, three distinct accepted measurements, fresh Dashboard data, and zero-actuator evidence passed. Auto Dosing remains OFF.
 
 ## 3. Completed Tasks
 
@@ -61,7 +61,7 @@
 | 45 | Phase 22B Stage 3 Pump A/B clean-water software preflight | Done (software only) | Profile 3 permits only mutually exclusive A/B MQTT pulses capped at 1000 ms; Main/spare/Serial/set locked. Read-only preflight, compile, regression 213/213, and syntax 55/55 passed. No upload or physical rerun was performed. Prior T07/T08, MQTT Pump Command, Pump Calibration, and clean-water sequential A/B tests remain the accepted physical evidence. |
 | 46 | Phase 22B closure and source baseline | Done | Current docs reconciled. Backend 213/213, frontend unit 5/5, Playwright 24/24, JavaScript syntax 56/56, diff check, secret/path checks, and a fresh USB_STAGE1 firmware compile passed. Git checkpoint recorded in `CODEX_PHASE22B_FINAL_REPORT.md`. |
 | 47 | Phase 23A Demo and Operational Readiness | Done | Backend 218/218, frontend unit 6/6, Playwright 26/26, PowerShell 3/3, real isolated Stage 0 backup/restore/readiness PASS. Restored evidence: 9 sensor logs, 7 Shadow decisions, zero pump logs/runs, Auto Dosing enabled count zero. |
-| 48 | Phase 23B Stage 1 network transition | In progress | New-LAN bind/auth/ACL/topic parity passed. Firmware remained `USB_STAGE1`; WPA handshake on the distant AP timed out with ESP-IDF reasons 15/204. Nonblocking retry hardening and diagnostics implemented; backend 219/219 and clean compile passed. Final upload/runtime waits for the nearer previous hotspot. |
+| 48 | Phase 23B Stage 1 network transition | Done | Distant-AP WPA timeout was diagnosed without weakening safety. Nonblocking retry hardening, auth/ACL/topic parity, backend 219/219, clean compile, COM5 upload, nearby-hotspot Wi-Fi/MQTT, boot transition, three accepted measurements, fresh Dashboard, and zero actuator side effects passed. |
 
 ## 4. Created Folders
 
@@ -540,8 +540,11 @@ Example verified safety event:
 | Backend regression | PASS | 219 passed, 0 failed, 0 skipped. |
 | Firmware compile | PASS | `USB_STAGE1`: flash 939976 bytes (71%), static RAM 47240 bytes (14%). |
 | Distant AP runtime | NOT ACCEPTED | ESP32 reached association but WPA 4-way/handshake timed out (ESP-IDF reasons 15/204). No MQTT client or telemetry was accepted. |
-| Final previous-hotspot runtime | PENDING | Hotspot profile exists and saved credential was verified without disclosure, but the hotspot was not broadcasting. |
-| Actuator side effects | NONE | Firmware profile stayed actuator-locked; no MQTT pump command was delivered and no pump operation was requested. |
+| Final previous-hotspot runtime | PASS | ESP32 joined the nearby hotspot, received `172.20.10.12`, authenticated to MQTT, and published V2 telemetry to `172.20.10.2:18885`. |
+| Boot transition and distinct telemetry | PASS | First packet was fail-closed as unconfirmed; seq 2-4 were accepted from one physical boot with 30-second spacing. |
+| Dashboard runtime | PASS | Real browser reported `connected-fresh`; Overview/Pumps actuator locks were visible, three pump buttons disabled, and Auto Dosing switch disabled. |
+| Actuator side effects | NONE | Physical boot produced at least five sensor logs, zero MQTT pump-command lines after connection, zero `pump_logs`, zero `dosing_runs`, and zero enabled Auto Dosing settings. |
+| TDS control state | FAIL-CLOSED AS EXPECTED | Physical voltage was above the synthetic Stage 1 fixture calibration range, so TDS control output stayed null. No calibration was activated or modified. |
 
 - Auto Dosing V2 is rule-based closed-loop step dosing, not Adaptive Dosing.
 - Daily reset changes only the software calculation window and cannot remove nutrient physically added to the reservoir.
@@ -566,7 +569,8 @@ Example verified safety event:
 - Auto Dosing has only been validated for conservative small-step dosing under supervision, not fully autonomous long-term cultivation.
 - pH remains `null`.
 - No authentication yet.
-- Phase 23B tested a replacement AP through the ignored Stage 1 runtime secret. The AP was 2.4 GHz/WPA2 compatible, but the ESP32 timed out during the WPA handshake, likely due to the physical radio path or AP policy. The final runtime will return to the nearer previous hotspot; no Wi-Fi credential is tracked or reported.
+- Phase 23B tested a distant replacement AP through the ignored Stage 1 runtime secret. Its WPA handshake timed out, so the accepted runtime returned to the nearer previous hotspot and passed. No Wi-Fi credential is tracked or reported.
+- The isolated Stage 1 database uses a synthetic calibration fixture whose voltage range does not include the physical 2.261 V reading. Backend fail-closed behavior is correct; do not infer, migrate, or activate a calibration set from this fixture.
 - No SQLite/PostgreSQL migration.
 - Cloud/Fleet Management remains architectural only.
 - No Device Enrollment, AI Model OTA, Zalo OA, or AI Camera.
@@ -579,7 +583,7 @@ Example verified safety event:
 
 ## 12. Next Recommended Direction
 
-"Enable the previously verified nearby hotspot and connect the computer to it. Restart isolated Stage 1 so its exact LAN bind and ignored firmware secret use that network, run preflight, then perform one final `USB_STAGE1` upload and verify fresh Telemetry Identity V2, Dashboard recovery, zero pump commands, and zero dosing runs."
+"Use the Phase 23A demo checklist with the verified nearby-hotspot Stage 1 runtime. Select the next feature phase through an explicit requirements review; do not repeat passed firmware uploads, telemetry checks, or pump tests by default, and do not enable Auto Dosing."
 
 ### Future Phase 20D DOCX Updates
 

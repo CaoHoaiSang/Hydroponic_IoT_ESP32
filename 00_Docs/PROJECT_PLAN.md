@@ -59,9 +59,10 @@ The current phase focuses on sensor reading, pump control, MQTT data transmissio
 | Phase 22B | Validate the isolated staging stack, physical USB telemetry, active EC/TDS calibration, dashboard data flow, bounded Main Pump operation, and actuator-locked restore |
 | Phase 22B closure | Consolidate evidence, preserve prior Pump A/B physical results, run final regression/security checks, and create a stable Git checkpoint |
 | Phase 23A | Harden demo startup, runtime freshness/offline recovery, isolated backup/restore, Shadow evidence, and zero-actuator acceptance checks |
+| Phase 23B | Harden nonblocking Wi-Fi recovery and move the actuator-locked Stage 1 telemetry path to a verified nearby hotspot |
 
 The next feature phase is intentionally not selected in this plan. It must be chosen from an
-explicit requirements review after the Phase 22B checkpoint instead of repeating already passed
+explicit requirements review after the Phase 23B checkpoint instead of repeating already passed
 hardware or telemetry tests.
 
 ## D. Definition Of Done For Core Phase
