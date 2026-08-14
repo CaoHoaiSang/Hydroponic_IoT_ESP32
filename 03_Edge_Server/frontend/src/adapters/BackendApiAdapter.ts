@@ -6,6 +6,16 @@ const lockedCapabilities: SystemCapabilities = {
   autoDosingLockReason: "Backend chưa công bố capability metadata; khóa fail-closed",
 };
 
+export const SNAPSHOT_FRESHNESS_MS = 120_000;
+
+export function isSnapshotFresh(measurementAt: string | null, nowMs = Date.now()): boolean {
+  if (!measurementAt) return false;
+  const measurementMs = Date.parse(measurementAt);
+  if (!Number.isFinite(measurementMs)) return false;
+  const ageMs = nowMs - measurementMs;
+  return ageMs >= 0 && ageMs <= SNAPSHOT_FRESHNESS_MS;
+}
+
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } });
   const body = await response.json().catch(() => ({}));

@@ -1,5 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BackendApiAdapter } from "./BackendApiAdapter";
+import { BackendApiAdapter, isSnapshotFresh, SNAPSHOT_FRESHNESS_MS } from "./BackendApiAdapter";
+
+describe("snapshot freshness", () => {
+  const now = Date.parse("2026-08-14T12:00:00.000Z");
+
+  it("accepts recent data and rejects stale, future, missing, or invalid timestamps", () => {
+    expect(isSnapshotFresh(new Date(now - SNAPSHOT_FRESHNESS_MS).toISOString(), now)).toBe(true);
+    expect(isSnapshotFresh(new Date(now - SNAPSHOT_FRESHNESS_MS - 1).toISOString(), now)).toBe(false);
+    expect(isSnapshotFresh(new Date(now + 1).toISOString(), now)).toBe(false);
+    expect(isSnapshotFresh(null, now)).toBe(false);
+    expect(isSnapshotFresh("not-a-date", now)).toBe(false);
+  });
+});
 
 describe("BackendApiAdapter sensor logs", () => {
   afterEach(() => vi.restoreAllMocks());

@@ -74,6 +74,32 @@ Invoke-RestMethod http://127.0.0.1:3001/health
 
 Kết quả đúng có `ok: true`, `mongoConnected: true` và `mqttConnected: true`.
 
+Launcher chỉ mở Dashboard khi cả ba điều kiện này cùng đúng. Nếu Backend còn phản hồi nhưng
+MongoDB hoặc MQTT đã ngắt, launcher không báo hệ thống sẵn sàng. Dashboard tự kiểm tra lại mỗi
+5 giây, phân biệt snapshot fresh/stale và giữ actuator ở trạng thái fail-closed trong lúc lỗi.
+
+## Phase 23A Demo Readiness
+
+Phase 23A dùng Stage 0 cô lập tại MongoDB `27018`, MQTT `18884` và HTTP `3100`. Không dùng các
+endpoint mặc định hoặc production. Từ `03_Edge_Server\mqtt_backend`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\staging\Reset-Staging.ps1
+powershell -ExecutionPolicy Bypass -File .\staging\Start-Staging.ps1
+npm run stage0:test
+npm run phase23a:check
+powershell -ExecutionPolicy Bypass -File .\staging\Backup-Staging.ps1
+```
+
+Restore chỉ chấp nhận database Stage 0 rỗng và chuỗi xác nhận
+`RESTORE_EMPTY_STAGE0`. Backup nằm trong `staging/.stage0_backups/`, bị Git-ignore và không phải
+artifact để commit. Xem `00_Docs/PHASE23A_DEMO_READINESS_CHECKLIST.md` trước buổi demo.
+
+Khi cần upload ESP32 ở một phiên sau, Wi-Fi/MQTT credential phải được tạo trong
+`staging/stage1/.stage1_runtime/secrets/` và `SecretsStage1.h`, đều bị Git-ignore. Không ghi Wi-Fi
+password vào source, README, report, commit hoặc câu lệnh được lưu lại. Phase 23A không upload
+firmware.
+
 ## Nguyên tắc an toàn
 
 - Production adapter không đọc query string để mở khóa actuator.

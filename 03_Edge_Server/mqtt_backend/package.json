@@ -14,6 +14,9 @@
     "frontend:verify": "npm --prefix ../frontend run verify",
     "build:local-ui": "npm run frontend:install && npm run frontend:build",
     "stage0:test": "node staging/runStage0Checks.js",
+    "stage0:backup": "node staging/stage0Backup.js backup",
+    "stage0:restore": "node staging/stage0Backup.js restore",
+    "phase23a:check": "node staging/verifyPhase23aReadiness.js",
     "stage1:test": "node staging/stage1/runStage1PreflightChecks.js"
   },
   "dependencies": {

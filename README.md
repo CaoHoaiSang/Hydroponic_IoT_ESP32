@@ -5,6 +5,12 @@ DS18B20 water temperature, water-level interlocks, MQTT, a local Edge Server, an
 
 ## Current Phase
 
+Phase 23A is complete and hardens the verified Phase 22B baseline for repeatable local demonstrations. The
+launcher now requires API, MongoDB, and MQTT health before reporting ready. The Dashboard
+distinguishes fresh, stale, and unavailable device data and remains fail-closed through an
+outage/recovery cycle. Stage 0 gains isolated EJSON backup/restore and a read-only demo readiness
+checker. Auto Dosing remains locked OFF and no actuator path is added.
+
 Phase 22B prototype integration and safety validation is complete. The physical ESP32 ran the
 `USB_STAGE1` actuator-locked profile, published authenticated Telemetry Identity V2 data to the
 isolated staging stack, and displayed live sensor data on the HydroFlow dashboard. The active

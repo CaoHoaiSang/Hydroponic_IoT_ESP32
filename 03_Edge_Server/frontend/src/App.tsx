@@ -54,7 +54,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { backendApiAdapter, CapabilityAdapter, HealthAdapter, type DeviceSnapshot, type SensorLogRow } from "./adapters";
+import { backendApiAdapter, CapabilityAdapter, HealthAdapter, isSnapshotFresh, type DeviceSnapshot, type SensorLogRow } from "./adapters";
 import { CalibrationWizard } from "./components/CalibrationWizard";
 
 type View = "overview" | "zones" | "garden" | "monitoring" | "pumps" | "dosing" | "assistant" | "calibration" | "data" | "settings" | "system";
@@ -253,11 +253,11 @@ const primaryCrop = (zone: GrowingZone) => zone.rackList.find((rack) => rack.cro
 const activeSeasonCount = (zone: GrowingZone) => zone.rackList.filter((rack) => rack.crop).length;
 const formatOptionalNumber = (value: number | null, digits = 0) => value === null ? "—" : value.toFixed(digits);
 
-function Overview({ onNavigate, mainPump, notify, zone, capabilities, health, runtimeDataAvailable, snapshot }: {
-  onNavigate: (view: View) => void; mainPump: boolean; notify: (text: string) => void; zone: GrowingZone; capabilities:SystemCapabilities; health:GatewayHealth; runtimeDataAvailable:boolean; snapshot:DeviceSnapshot|null;
+function Overview({ onNavigate, mainPump, notify, zone, capabilities, health, runtimeDataAvailable, runtimeDataFresh, snapshot }: {
+  onNavigate: (view: View) => void; mainPump: boolean; notify: (text: string) => void; zone: GrowingZone; capabilities:SystemCapabilities; health:GatewayHealth; runtimeDataAvailable:boolean; runtimeDataFresh:boolean; snapshot:DeviceSnapshot|null;
 }) {
   const [range, setRange] = useState("24 giờ");
-  const actuatorAvailable = !capabilities.actuatorsLocked && capabilities.pumpCommandsEnabled;
+  const actuatorAvailable = health.connected && health.mongoConnected && health.mqttConnected && runtimeDataFresh && !capabilities.actuatorsLocked && capabilities.pumpCommandsEnabled;
   const requestActuator = async (kind:"main"|"A"|"B", label:string) => {
     try {
       if (kind === "main") await backendApiAdapter.setMainPump(zone.deviceId, !mainPump);
@@ -326,7 +326,7 @@ function Overview({ onNavigate, mainPump, notify, zone, capabilities, health, ru
           <div className="panel-head"><div><span className="panel-kicker">Thiết bị chấp hành</span><h2>Điều khiển bơm nhanh</h2></div><button className="icon-text-button" onClick={() => onNavigate("pumps")}>Chi tiết <span>→</span></button></div>
           {!actuatorAvailable && <div className="actuator-lock-inline" data-testid="actuator-lock-reason"><LockKeyhole size={14}/><span>{capabilities.autoDosingLockReason}</span></div>}
           <div className="pump-list">
-            <div className="pump-row"><span className={`pump-avatar ${mainPump ? "running" : ""}`}><Power size={18} /></span><div><strong>Bơm hồi lưu vùng</strong><p>{mainPump ? "Backend báo đang chạy" : "Backend báo đang tắt"}</p></div><button className={`switch ${mainPump ? "on" : ""}`} role="switch" aria-checked={mainPump} aria-label="Yêu cầu Backend bật hoặc tắt bơm hồi lưu vùng" disabled={!actuatorAvailable} onClick={() => void requestActuator("main", mainPump ? "tắt bơm hồi lưu" : "bật bơm hồi lưu")}><span /></button></div>
+            <div className="pump-row"><span className={`pump-avatar ${runtimeDataFresh && mainPump ? "running" : ""}`}><Power size={18} /></span><div><strong>Bơm hồi lưu vùng</strong><p>{!runtimeDataFresh ? "Snapshot bơm đã cũ - chưa xác nhận" : mainPump ? "Backend báo đang chạy" : "Backend báo đang tắt"}</p></div><button className={`switch ${runtimeDataFresh && mainPump ? "on" : ""}`} role="switch" aria-checked={runtimeDataFresh && mainPump} aria-label="Yêu cầu Backend bật hoặc tắt bơm hồi lưu vùng" disabled={!actuatorAvailable} onClick={() => void requestActuator("main", mainPump ? "tắt bơm hồi lưu" : "bật bơm hồi lưu")}><span /></button></div>
             <div className="pump-row"><span className="pump-avatar nutrient-a">A</span><div><strong>Bơm dinh dưỡng A</strong><p>{actuatorAvailable ? "Backend sẵn sàng · 2.0 ml/s" : "Đang bị khóa"}</p></div><button className="pulse-button" disabled={!actuatorAvailable} onClick={() => void requestActuator("A", "pulse thử 500 ms tới bơm A")}>Pulse 500 ms</button></div>
             <div className="pump-row"><span className="pump-avatar nutrient-b">B</span><div><strong>Bơm dinh dưỡng B</strong><p>{actuatorAvailable ? "Backend sẵn sàng · 1.8 ml/s" : "Đang bị khóa"}</p></div><button className="pulse-button" disabled={!actuatorAvailable} onClick={() => void requestActuator("B", "pulse thử 500 ms tới bơm B")}>Pulse 500 ms</button></div>
           </div>
@@ -486,13 +486,13 @@ function PumpControlCard({ name, subtitle, letter, running, color, onAction, nut
   return <article className={`pump-control-card ${disabled?"actuator-disabled":""}`}><div className="pump-control-head"><span className={`pump-large ${color}`}>{letter === "M" ? <Power size={23}/> : letter}</span><div><strong>{name}</strong><p>{subtitle}</p></div><span className={`status-chip ${disabled?"muted":running?"success":"muted"}`}>{disabled?"Bị khóa":running?"Đang chạy":"Sẵn sàng"}</span></div><div className="pump-visual"><div className={`motor ${running?"rotating":""}`}><i/><i/><i/></div><div className={`flow-line ${running?"active":""}`}><i/><i/><i/></div></div>{nutrient?<div className="pulse-controls"><label>Thời gian pulse<input aria-label={`Thời gian pulse bơm ${letter}`} type="number" min="50" max="5000" step="50" value={duration} onChange={e=>setDuration(e.target.value)} disabled={disabled}/><span>ms</span></label><button disabled={disabled} onClick={()=>onAction(duration)}><Play size={15}/> Chạy pulse thử</button></div>:<button className={`pump-main-action ${running?"stop":""}`} disabled={disabled} onClick={()=>onAction()}><Power size={16}/> {running?"Tắt bơm hồi lưu":"Bật bơm hồi lưu"}</button>}</article>;
 }
 
-function PumpsView({ deviceId, mainPump, notify, onNavigate, capabilities }: { deviceId:string; mainPump:boolean; notify:(text:string)=>void; onNavigate:(view:View)=>void; capabilities:SystemCapabilities }) {
+function PumpsView({ deviceId, mainPump, notify, onNavigate, capabilities, runtimeOperational }: { deviceId:string; mainPump:boolean; notify:(text:string)=>void; onNavigate:(view:View)=>void; capabilities:SystemCapabilities; runtimeOperational:boolean }) {
   const [confirmPump, setConfirmPump] = useState<{pump:"A"|"B";duration:number}|null>(null);
-  const actuatorAvailable=!capabilities.actuatorsLocked&&capabilities.pumpCommandsEnabled;
+  const actuatorAvailable=runtimeOperational&&!capabilities.actuatorsLocked&&capabilities.pumpCommandsEnabled;
   const requestMainPump=async()=>{try{await backendApiAdapter.setMainPump(deviceId,!mainPump);notify(`Đã chuyển yêu cầu ${mainPump?"tắt":"bật"} bơm hồi lưu tới Backend; chờ trạng thái xác nhận`);}catch(error){notify(error instanceof Error?error.message:"Backend từ chối yêu cầu điều khiển");}};
   return <div className="view-stack"><ViewHeader eyebrow="Điều khiển cục bộ" title="Điều khiển bơm" description="Lệnh được kiểm tra an toàn tại Edge Gateway trước khi gửi tới ESP32." action={<span className="local-only-badge"><ShieldCheck size={15}/> Điều khiển Local</span>} />
     <div className={`safety-notice ${actuatorAvailable?"":"locked"}`} data-testid="pump-capability-banner"><ShieldCheck size={20}/><div><strong>{actuatorAvailable?"Backend cho phép gửi yêu cầu điều khiển":"Thiết bị chấp hành đang bị khóa"}</strong><p>{actuatorAvailable?"Trạng thái chỉ thay đổi sau khi Backend xác nhận; giao diện không cập nhật lạc quan.":capabilities.autoDosingLockReason}</p></div><span>{actuatorAvailable?"Backend authority":"LOCKED"}</span></div>
-    <section className="pump-control-grid"><PumpControlCard name="Bơm hồi lưu vùng" subtitle="Kênh điều khiển do Backend quản lý" letter="M" color="main" running={mainPump} disabled={!actuatorAvailable} onAction={requestMainPump}/><PumpControlCard name="Bơm dinh dưỡng A" subtitle="Lưu lượng chưa nạp vào giao diện · CH2" letter="A" color="a" running={false} nutrient disabled={!actuatorAvailable} onAction={(duration)=>setConfirmPump({pump:"A",duration:Math.min(5000,Math.max(50,Number(duration)||500))})}/><PumpControlCard name="Bơm dinh dưỡng B" subtitle="Lưu lượng chưa nạp vào giao diện · CH3" letter="B" color="b" running={false} nutrient disabled={!actuatorAvailable} onAction={(duration)=>setConfirmPump({pump:"B",duration:Math.min(5000,Math.max(50,Number(duration)||500))})}/></section>
+    <section className="pump-control-grid"><PumpControlCard name="Bơm hồi lưu vùng" subtitle="Kênh điều khiển do Backend quản lý" letter="M" color="main" running={runtimeOperational && mainPump} disabled={!actuatorAvailable} onAction={requestMainPump}/><PumpControlCard name="Bơm dinh dưỡng A" subtitle="Lưu lượng chưa nạp vào giao diện · CH2" letter="A" color="a" running={false} nutrient disabled={!actuatorAvailable} onAction={(duration)=>setConfirmPump({pump:"A",duration:Math.min(5000,Math.max(50,Number(duration)||500))})}/><PumpControlCard name="Bơm dinh dưỡng B" subtitle="Lưu lượng chưa nạp vào giao diện · CH3" letter="B" color="b" running={false} nutrient disabled={!actuatorAvailable} onAction={(duration)=>setConfirmPump({pump:"B",duration:Math.min(5000,Math.max(50,Number(duration)||500))})}/></section>
     <section className="dashboard-grid equal"><article className="panel"><div className="panel-head"><div><span className="panel-kicker">Trạng thái phần cứng</span><h2>Kiểm tra kênh điều khiển</h2></div><span className="status-chip muted">Chưa có telemetry kênh</span></div><div className="hardware-list">{[["MOSFET CH1","Bơm hồi lưu"],["MOSFET CH2","Bơm A"],["MOSFET CH3","Bơm B"],["MOSFET CH4","Dự phòng"]].map(([ch,name])=><div key={ch}><span className="idle"><Zap size={15}/></span><div><strong>{ch}</strong><p>{name}</p></div><em>Chưa xác minh</em></div>)}</div></article><article className="panel"><div className="panel-head"><div><span className="panel-kicker">Hiệu chuẩn</span><h2>Lưu lượng bơm dinh dưỡng</h2></div><button className="icon-text-button" onClick={()=>onNavigate("calibration")}>Mở hiệu chuẩn →</button></div><div className="calibration-summary"><div><span className="pump-avatar nutrient-a">A</span><div><strong>— ml/s</strong><p>Chưa nạp từ Backend</p></div><span className="status-chip muted">Chưa xác minh</span></div><div><span className="pump-avatar nutrient-b">B</span><div><strong>— ml/s</strong><p>Chưa nạp từ Backend</p></div><span className="status-chip muted">Chưa xác minh</span></div></div><div className="calibration-tip"><AlertTriangle size={16}/><p>Backend vẫn kiểm tra hiệu chuẩn và interlock trước khi chấp nhận mọi pulse.</p></div></article></section>
     {confirmPump && <div className="modal-backdrop"><div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="pump-confirm-title"><span className="modal-icon"><AlertTriangle size={24}/></span><h2 id="pump-confirm-title">Xác nhận yêu cầu chạy bơm {confirmPump.pump}</h2><p>Backend sẽ kiểm tra lại capability, hiệu chuẩn và interlock trước khi tạo command pulse {confirmPump.duration} ms. Giao diện không tự ước tính thể tích khi chưa nạp lưu lượng.</p><div className="modal-facts"><span>Thời gian pulse <b>{confirmPump.duration} ms</b></span><span>Mực nước <b>Backend kiểm tra</b></span><span>Bơm hồi lưu <b>{mainPump?"Đang chạy":"Đang tắt"}</b></span></div><div className="modal-actions"><button className="secondary-button" onClick={()=>setConfirmPump(null)}>Hủy</button><button className="primary-button" onClick={()=>void (async()=>{try{await backendApiAdapter.pulsePump(deviceId,confirmPump.pump,confirmPump.duration);notify(`Đã chuyển yêu cầu pulse ${confirmPump.duration} ms bơm ${confirmPump.pump} tới Backend`);}catch(error){notify(error instanceof Error?error.message:"Backend từ chối yêu cầu điều khiển");}finally{setConfirmPump(null);}})()}><Play size={15}/> Gửi yêu cầu tới Backend</button></div></div></div>}
   </div>;
@@ -874,16 +874,17 @@ export default function Home() {
   const [gatewayAdapter,setGatewayAdapter]=useState<GatewayAdapter>(lockedGatewayAdapter);
   const [backendConnected,setBackendConnected]=useState(false);
   const [runtimeDataAvailable,setRuntimeDataAvailable]=useState(false);
+  const [runtimeDataFresh,setRuntimeDataFresh]=useState(false);
   const [latestSnapshot,setLatestSnapshot]=useState<DeviceSnapshot|null>(null);
   const selectedZone = useMemo(() => zones.find((zone) => zone.id === selectedZoneId) ?? zones[0], [zones, selectedZoneId]);
   const crop = primaryCrop(selectedZone);
   const mainPump = pumpStates[selectedZoneId] ?? false;
   const autoDosingEnabled = false;
 
-  const applyDeviceSnapshot = useCallback((snapshot: DeviceSnapshot) => {
+  const applyDeviceSnapshot = useCallback((snapshot: DeviceSnapshot, fresh: boolean) => {
     setZones(items => items.map(zone => zone.deviceId !== snapshot.deviceId ? zone : {
       ...zone,
-      status: snapshot.waterLevel === "low" || snapshot.waterLevel === "error" ? "warning" : "online",
+      status: !fresh ? "offline" : snapshot.waterLevel === "low" || snapshot.waterLevel === "error" ? "warning" : "online",
       tds: snapshot.tdsPpm,
       ec: snapshot.ecUsCm,
       temperature: snapshot.waterTemp,
@@ -892,6 +893,7 @@ export default function Home() {
     setPumpStates(states => ({ ...states, "zone-nft-01": snapshot.pumpMain }));
     setLatestSnapshot(snapshot);
     setRuntimeDataAvailable(true);
+    setRuntimeDataFresh(fresh);
     setLastRefresh(snapshot.measurementAt ? new Date(snapshot.measurementAt).toLocaleTimeString("vi-VN") : new Date().toLocaleTimeString("vi-VN"));
   }, []);
 
@@ -904,10 +906,16 @@ export default function Home() {
 
     const capabilities = capabilityResult.status === "fulfilled" ? capabilityResult.value : lockedGatewayAdapter.capabilities;
     const health = healthResult.status === "fulfilled" ? healthResult.value : lockedGatewayAdapter.health;
+    const connected = healthResult.status === "fulfilled" && healthResult.value.connected;
     setGatewayAdapter({ capabilities, health });
-    setBackendConnected(healthResult.status === "fulfilled" && healthResult.value.connected);
-    if (snapshotResult.status === "fulfilled") applyDeviceSnapshot(snapshotResult.value);
-    else { setRuntimeDataAvailable(false); setLatestSnapshot(null); }
+    setBackendConnected(connected);
+    if (snapshotResult.status === "fulfilled") {
+      applyDeviceSnapshot(snapshotResult.value, connected && isSnapshotFresh(snapshotResult.value.measurementAt));
+    } else {
+      setRuntimeDataAvailable(false);
+      setRuntimeDataFresh(false);
+      setLatestSnapshot(null);
+    }
   }, [applyDeviceSnapshot]);
 
   useEffect(()=>{
@@ -971,6 +979,7 @@ export default function Home() {
   };
 
   const routeMetadata=routeMetadataFor(view,currentPath,selectedZone,crop);
+  const backendState = !backendConnected ? "offline" : !runtimeDataAvailable ? "connected-no-data" : runtimeDataFresh ? "connected-fresh" : "connected-stale";
 
   return (
     <div className={`app-shell ${darkMode ? "dark" : ""} ${sidebarOpen ? "" : "sidebar-compact"}`}>
@@ -1009,13 +1018,13 @@ export default function Home() {
           <span className="breadcrumb" data-testid="route-breadcrumb">{routeMetadata.breadcrumbs.map((item,index)=><span key={`${item}-${index}`}>{index>0&&<em>/</em>}{index===0?<b>{item}</b>:item}</span>)}</span><span className="last-update">Cập nhật: {lastRefresh}</span><button aria-label="Tùy chọn khác"><MoreHorizontal size={17} /></button>
         </div>
         <main className="content-area">
-          <div className={`backend-banner ${backendConnected ? "connected" : "disconnected"}`} role="status"><span><StatusDot status={backendConnected ? "online" : "offline"}/><strong>{backendConnected ? "Local Backend/API đã kết nối" : "Chưa kết nối Backend"}</strong></span><small>{backendConnected ? (runtimeDataAvailable ? "device001 đang dùng dữ liệu runtime từ API cục bộ" : "Backend đã kết nối nhưng chưa có snapshot device001") : "Không tự thay bằng mock; actuator luôn khóa fail-closed"}</small></div>
+          <div className={`backend-banner runtime-health-banner ${backendConnected ? "connected" : "disconnected"} ${backendState === "connected-stale" ? "stale" : ""}`} role="status" data-testid="backend-connection-banner" data-connection-state={backendState}><span><StatusDot status={!backendConnected ? "offline" : runtimeDataFresh ? "online" : "warning"}/><strong>{!backendConnected ? "Chưa kết nối Backend" : backendState === "connected-stale" ? "Backend đã kết nối - dữ liệu ESP32 đã cũ" : "Local Backend/API đã kết nối"}</strong></span><small>{!backendConnected ? "Không tự thay bằng mock; actuator luôn khóa fail-closed" : !runtimeDataAvailable ? "Backend đã kết nối nhưng chưa có snapshot device001" : runtimeDataFresh ? "device001 đang dùng dữ liệu runtime fresh từ API cục bộ" : "Snapshot quá 120 giây hoặc timestamp không hợp lệ; chỉ hiển thị để quan sát"}</small></div>
           <div className="prototype-scope-banner" role="note"><BookOpen size={16}/><span><strong>Phạm vi tích hợp:</strong> số đo device001, sensor logs, health, capability, calibration và CSV dùng Backend thật. Zone/rack/season chỉ là bản nháp trong phiên trình duyệt; AI, Cloud, biểu đồ lịch sử và system metrics chưa tích hợp.</span></div>
-          {view === "overview" && <Overview onNavigate={navigate} mainPump={mainPump} notify={notify} zone={selectedZone} capabilities={gatewayAdapter.capabilities} health={gatewayAdapter.health} runtimeDataAvailable={runtimeDataAvailable} snapshot={latestSnapshot} />}
+          {view === "overview" && <Overview onNavigate={navigate} mainPump={mainPump} notify={notify} zone={selectedZone} capabilities={gatewayAdapter.capabilities} health={gatewayAdapter.health} runtimeDataAvailable={runtimeDataAvailable} runtimeDataFresh={runtimeDataFresh} snapshot={latestSnapshot} />}
           {view === "zones" && <ZonesView zones={zones} selectedZoneId={selectedZoneId} onSelect={selectZone} onAddZone={addZone} onUpdateZone={updateZone} notify={notify} health={gatewayAdapter.health} />}
           {view === "garden" && <GardenView key={selectedZone.id} notify={notify} onNavigate={navigate} zone={selectedZone} onUpdateZone={updateZone} />}
           {view === "monitoring" && <MonitoringView zone={selectedZone} runtimeDataAvailable={runtimeDataAvailable} health={gatewayAdapter.health} snapshot={latestSnapshot} />}
-          {view === "pumps" && <PumpsView deviceId={selectedZone.deviceId} mainPump={mainPump} notify={notify} onNavigate={navigate} capabilities={gatewayAdapter.capabilities} />}
+          {view === "pumps" && <PumpsView deviceId={selectedZone.deviceId} mainPump={mainPump} notify={notify} onNavigate={navigate} capabilities={gatewayAdapter.capabilities} runtimeOperational={backendConnected && gatewayAdapter.health.mongoConnected && gatewayAdapter.health.mqttConnected && runtimeDataFresh} />}
           {view === "dosing" && <DosingView mainPump={mainPump} crop={crop} zone={selectedZone} capabilities={gatewayAdapter.capabilities} />}
           {view === "assistant" && <AssistantView crop={crop} setCrop={setCrop} notify={notify} onNavigate={navigate} zone={selectedZone} />}
           {view === "calibration" && <CalibrationWizard deviceId={selectedZone.deviceId} notify={notify} />}

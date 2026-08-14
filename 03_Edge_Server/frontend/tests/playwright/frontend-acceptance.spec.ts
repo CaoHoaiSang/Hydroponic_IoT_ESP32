@@ -31,3 +31,48 @@ test("Back and Forward navigation remain functional", async ({ page }) => { awai
 test("production ignores no-overlap fixture query", async ({ page }) => { await page.goto("/overview?tds=no-overlap"); await expect(page.getByText("Local Backend/API đã kết nối")).toBeVisible(); });
 test("SPA unknown non-API route returns frontend", async ({ page }) => { expect((await page.goto("/unknown-local-route"))?.status()).toBe(200); await expect(page.locator("#root")).toBeVisible(); });
 test("API unknown route is not swallowed by SPA", async ({ request }) => { expect((await request.get("/api/unknown-local-route")).status()).toBe(404); });
+
+test("dashboard fails closed during outage and recovers on refresh", async ({ page }) => {
+  let online = true;
+  let measurementAt = new Date().toISOString();
+  await page.route("**/health", route => route.fulfill({
+    status: online ? 200 : 503,
+    contentType: "application/json",
+    body: JSON.stringify(online ? { ok: true, mongoConnected: true, mqttConnected: true } : { ok: false }),
+  }));
+  await page.route("**/api/system/capabilities", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ ok: true, data: { buildProfile: "LOCAL_UI_SAFE", actuatorsLocked: true, pumpCommandsEnabled: false, pumpMainCanSet: false, nutrientPumpCanPulse: false, autoDosingCanEnable: false, autoDosingLockReason: "locked" } }),
+  }));
+  await page.route("**/api/devices/device001/latest", route => route.fulfill({
+    status: online ? 200 : 503,
+    contentType: "application/json",
+    body: JSON.stringify(online ? { ok: true, deviceId: "device001", latest: { measurementAt, tdsPpm: 670, ecUsCm: 1340, waterTemp: 26, waterLevel: "normal", pumpMain: false, tdsControlValid: true } } : { ok: false }),
+  }));
+
+  await page.goto("/overview");
+  const banner = page.getByTestId("backend-connection-banner");
+  await expect(banner).toHaveAttribute("data-connection-state", "connected-fresh");
+
+  online = false;
+  await page.getByRole("button", { name: "Làm mới dữ liệu" }).click();
+  await expect(banner).toHaveAttribute("data-connection-state", "offline");
+  await expect(page.getByTestId("actuator-lock-reason")).toBeVisible();
+
+  online = true;
+  measurementAt = new Date().toISOString();
+  await expect(banner).toHaveAttribute("data-connection-state", "connected-fresh", { timeout: 7_000 });
+});
+
+test("dashboard marks an old snapshot stale without hiding its observation values", async ({ page }) => {
+  await page.route("**/health", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, mongoConnected: true, mqttConnected: true }) }));
+  await page.route("**/api/system/capabilities", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: { buildProfile: "TEST_UNLOCKED", actuatorsLocked: false, pumpCommandsEnabled: true, pumpMainCanSet: true, nutrientPumpCanPulse: true, autoDosingCanEnable: false, autoDosingLockReason: "runtime_not_ready" } }) }));
+  await page.route("**/api/devices/device001/latest", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, deviceId: "device001", latest: { measurementAt: "2020-01-01T00:00:00.000Z", tdsPpm: 670, ecUsCm: 1340, waterTemp: 26, waterLevel: "normal", pumpMain: false, tdsControlValid: true } }) }));
+  await page.goto("/overview");
+  await expect(page.getByTestId("backend-connection-banner")).toHaveAttribute("data-connection-state", "connected-stale");
+  await expect(page.getByText("670").first()).toBeVisible();
+  await page.goto("/zones/zone-nft-01/pumps");
+  await expect(page.getByTestId("pump-capability-banner")).toContainText("khóa");
+  await expect(page.getByRole("button", { name: /Bật bơm hồi lưu|Tắt bơm hồi lưu/ })).toBeDisabled();
+});

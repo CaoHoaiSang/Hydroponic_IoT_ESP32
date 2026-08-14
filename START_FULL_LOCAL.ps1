@@ -26,12 +26,11 @@ function Test-TcpPort([string]$hostName, [int]$port, [int]$timeoutMs = 1200) {
   }
 }
 
-function Test-HydroFlowHealth {
+function Get-HydroFlowHealth {
   try {
-    $response = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 2
-    return $response.ok -eq $true
+    return Invoke-RestMethod -Uri $healthUrl -TimeoutSec 2
   } catch {
-    return $false
+    return $null
   }
 }
 
@@ -63,10 +62,14 @@ try {
   }
   Write-Host "  Node.js: $nodeVersionText"
 
-  if (Test-HydroFlowHealth) {
-    Write-Step 'HydroFlow is already running at http://127.0.0.1:3001'
-    Start-Process $dashboardUrl
-    exit 0
+  $existingHealth = Get-HydroFlowHealth
+  if ($existingHealth) {
+    if ($existingHealth.ok -eq $true -and $existingHealth.mongoConnected -eq $true -and $existingHealth.mqttConnected -eq $true) {
+      Write-Step 'HydroFlow is already running at http://127.0.0.1:3001'
+      Start-Process $dashboardUrl
+      exit 0
+    }
+    throw "HydroFlow Backend is responding but dependencies are not ready (MongoDB=$($existingHealth.mongoConnected), MQTT=$($existingHealth.mqttConnected)). Stop the Backend, restore dependencies, then retry."
   }
 
   if (Test-TcpPort '127.0.0.1' 3001) {
@@ -128,7 +131,7 @@ try {
       for ($attempt = 0; $attempt -lt 60; $attempt += 1) {
         try {
           $response = Invoke-RestMethod -Uri $health -TimeoutSec 1
-          if ($response.ok -eq $true) {
+          if ($response.ok -eq $true -and $response.mongoConnected -eq $true -and $response.mqttConnected -eq $true) {
             Start-Process $url
             return
           }

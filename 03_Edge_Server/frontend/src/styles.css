@@ -436,6 +436,7 @@ body{font-size:14px;line-height:1.5;letter-spacing:.005em}
 .backend-banner{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:11px 16px;margin-bottom:16px;border-radius:12px;border:1px solid var(--border);background:var(--surface)}
 .backend-banner>span{display:flex;align-items:center;gap:9px}.backend-banner small{color:var(--text-muted)}
 .backend-banner.connected{border-color:rgba(36,159,104,.35);background:rgba(36,159,104,.07)}
+.backend-banner.stale{border-color:rgba(222,166,44,.42);background:rgba(222,166,44,.09)}
 .backend-banner.disconnected{border-color:rgba(222,118,56,.35);background:rgba(222,118,56,.08)}
 .prototype-scope-banner{display:flex;align-items:flex-start;gap:9px;padding:10px 14px;margin:-6px 0 18px;border:1px solid rgba(68,113,184,.24);border-radius:10px;background:rgba(68,113,184,.07);color:var(--text-muted);font-size:12px;line-height:1.5}.prototype-scope-banner svg{flex:0 0 auto;margin-top:1px;color:#4471b8}.prototype-scope-banner strong{color:var(--text)}
 .app-shell{max-width:100%;overflow-x:clip}.main-area,.content-area,.view-stack,.overview-hero>*,.dashboard-grid>*{min-width:0}

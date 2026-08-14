@@ -46,3 +46,26 @@ production backend and Dashboard files. It verifies Telemetry Identity V2, boot 
 duplicates, retry idempotency, out-of-order data, delayed freshness, three distinct stable
 measurements, Shadow status/history, API/Dashboard responses, Auto Dosing OFF, rejected
 manual pump paths, zero pump command, zero pump log, and zero dosing run.
+
+## Phase 23A Backup And Demo Check
+
+Stage 0 backup is EJSON so MongoDB dates and object IDs remain typed. It is fixed to
+`127.0.0.1:27018/hydroponic_stage0`; production/default MongoDB is rejected.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\staging\Backup-Staging.ps1
+npm run phase23a:check
+```
+
+Backup files are created under ignored `staging/.stage0_backups/`. Restore requires a running,
+empty Stage 0 database and an exact confirmation:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\staging\Restore-Staging.ps1 `
+  -InputPath .\staging\.stage0_backups\<backup-file>.ejson `
+  -Confirm RESTORE_EMPTY_STAGE0
+```
+
+The readiness checker is read-only. It requires Backend/MongoDB/MQTT health, Dashboard HTTP 200,
+locked actuator capability, Auto Dosing unavailable, Telemetry Identity/Shadow evidence, zero
+pump logs, and zero dosing runs.

@@ -7,8 +7,8 @@
 
 ## 2. Current Project Phase
 
-- Current phase: Phase 22B - Prototype Integration and Safety Validation Complete
-- Short description: Physical USB telemetry, Dashboard data flow, EC-first calibration, a clean 30-minute soak, bounded Main Pump operation, and actuator-locked restore passed. Pump A/B physical, calibration, MQTT pulse, and sequential clean-water dosing behavior were already passed in earlier phases. Stage 3 remains a compiled software-only profile and will not be physically rerun as a duplicate test. Auto Dosing remains OFF.
+- Current phase: Phase 23A - Demo and Operational Readiness Complete
+- Short description: Deterministic health gating, Dashboard fresh/stale/offline recovery, isolated Stage 0 backup/restore, Shadow demonstration evidence, and zero-actuator acceptance checks passed. Auto Dosing remains OFF. No firmware upload or hardware operation occurred.
 
 ## 3. Completed Tasks
 
@@ -60,6 +60,7 @@
 | 44 | SEN0244 post-clean prototype revalidation | Accepted by operator | Sustained drift resolved. First 15-minute run settled to 14 consecutive valid samples; second run had 29/30 valid with one isolated rejected ADC window followed by six valid samples. Operator accepted this section for prototype progression; TDS remains an Auto Dosing advisory when invalid. |
 | 45 | Phase 22B Stage 3 Pump A/B clean-water software preflight | Done (software only) | Profile 3 permits only mutually exclusive A/B MQTT pulses capped at 1000 ms; Main/spare/Serial/set locked. Read-only preflight, compile, regression 213/213, and syntax 55/55 passed. No upload or physical rerun was performed. Prior T07/T08, MQTT Pump Command, Pump Calibration, and clean-water sequential A/B tests remain the accepted physical evidence. |
 | 46 | Phase 22B closure and source baseline | Done | Current docs reconciled. Backend 213/213, frontend unit 5/5, Playwright 24/24, JavaScript syntax 56/56, diff check, secret/path checks, and a fresh USB_STAGE1 firmware compile passed. Git checkpoint recorded in `CODEX_PHASE22B_FINAL_REPORT.md`. |
+| 47 | Phase 23A Demo and Operational Readiness | Done | Backend 218/218, frontend unit 6/6, Playwright 26/26, PowerShell 3/3, real isolated Stage 0 backup/restore/readiness PASS. Restored evidence: 9 sensor logs, 7 Shadow decisions, zero pump logs/runs, Auto Dosing enabled count zero. |
 
 ## 4. Created Folders
 
@@ -515,6 +516,19 @@ Example verified safety event:
 | Secret/path checks | PASS | No runtime `.env`, `Secrets.h`, credential file, archive, dependency tree, or build output is included. Known Wi-Fi password occurrence count is zero. |
 | Runtime side effects | NONE | No service start, database write, MQTT publish, firmware upload, Auto Dosing action, or pump operation occurred during closure. |
 
+### Phase 23A Verification
+
+| Check | Result | Notes |
+|---|---|---|
+| Backend regression | PASS | 218 passed, 0 failed, 0 skipped. |
+| Frontend verification | PASS | ESLint, TypeScript, 6 unit tests, and production build passed. |
+| Browser acceptance | PASS | 26 passed, including stale display, stale-snapshot actuator lock even when capability is open, and outage-to-auto-recovery after the five-second refresh. |
+| PowerShell parse | PASS | Launcher, backup, and restore scripts parsed with zero errors. |
+| Stage 0 clean lifecycle | PASS | Reset/start, Telemetry Identity/Shadow check, backup, non-empty restore rejection, empty restore, readiness, and stop passed. |
+| Restored safety counts | PASS | 9 sensor logs, 7 Shadow decisions, 0 pump logs, 0 dosing runs, 0 enabled Auto Dosing settings. |
+| Isolation | PASS | Only `127.0.0.1:27018/18884/3100` was used for Phase 23A runtime. Stage 1 remained healthy and unchanged. |
+| Firmware/hardware | NOT RUN | No firmware source change, compile/upload requirement, 12V operation, or pump action in Phase 23A. |
+
 - Auto Dosing V2 is rule-based closed-loop step dosing, not Adaptive Dosing.
 - Daily reset changes only the software calculation window and cannot remove nutrient physically added to the reservoir.
 - Event logging is monitoring-only; failures are warned without interrupting the working dosing sequence.
@@ -538,6 +552,7 @@ Example verified safety event:
 - Auto Dosing has only been validated for conservative small-step dosing under supervision, not fully autonomous long-term cultivation.
 - pH remains `null`.
 - No authentication yet.
+- A replacement Wi-Fi network was supplied for the next ESP32 upload. It is intentionally not stored in tracked source or reports and has not been applied because Phase 23A did not upload firmware. Apply it only through the ignored Stage 1 runtime secret at the next supervised upload.
 - No SQLite/PostgreSQL migration.
 - Cloud/Fleet Management remains architectural only.
 - No Device Enrollment, AI Model OTA, Zalo OA, or AI Camera.
@@ -550,7 +565,7 @@ Example verified safety event:
 
 ## 12. Next Recommended Direction
 
-"Finish the Phase 22B source checkpoint and review the next product requirement before adding code. Do not repeat Pump A/B or generic multi-hour telemetry tests. A multi-day sensor/load observation is required only before a future decision to permit unattended automatic dosing."
+"Use `00_Docs/PHASE23A_DEMO_READINESS_CHECKLIST.md` for the next demonstration. Before selecting Phase 23B, decide whether the next goal is thesis presentation hardening or supervised progression toward automatic operation. Do not unlock Auto Dosing or repeat passed hardware tests by default."
 
 ### Future Phase 20D DOCX Updates
 

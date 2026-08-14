@@ -29,3 +29,4 @@ coverage/
 .idea/
 **/.stage0_runtime/
 **/.stage1_runtime/
+**/.stage0_backups/
