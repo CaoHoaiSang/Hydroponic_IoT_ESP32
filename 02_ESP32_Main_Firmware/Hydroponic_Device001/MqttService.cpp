@@ -19,6 +19,8 @@ unsigned long previousWifiAttemptMs = 0;
 unsigned long previousMqttAttemptMs = 0;
 bool wifiBeginCalled = false;
 bool wifiConnectedMessagePrinted = false;
+bool wifiRetryPending = false;
+unsigned long wifiRetryStartedMs = 0;
 MqttMessageHandler mqttMessageHandler = nullptr;
 
 static void handleMqttMessage(char* topic, byte* payload, unsigned int length) {
@@ -51,12 +53,22 @@ static void startWifiConnection() {
   Serial.println("WiFi connecting");
 
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
+  WiFi.persistent(false);
+  WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   wifiBeginCalled = true;
+  wifiRetryPending = false;
   wifiConnectedMessagePrinted = false;
   previousWifiAttemptMs = millis();
+}
+
+static void scheduleWifiRetry() {
+  Serial.println("WiFi connection timeout, resetting STA before retry");
+  WiFi.disconnect(false, false);
+  wifiBeginCalled = false;
+  wifiRetryPending = true;
+  wifiRetryStartedMs = millis();
 }
 
 static void connectMqttIfNeeded() {
@@ -98,6 +110,13 @@ static void connectMqttIfNeeded() {
 }
 
 void mqttBegin() {
+  WiFi.onEvent(
+    [](WiFiEvent_t event, WiFiEventInfo_t info) {
+      Serial.print("WiFi disconnected, reason: ");
+      Serial.println(info.wifi_sta_disconnected.reason);
+    },
+    WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED
+  );
   mqttClient.setServer(MQTT_HOST, MQTT_PORT);
   mqttClient.setCallback(handleMqttMessage);
   mqttClient.setBufferSize(MQTT_PACKET_BUFFER_SIZE);
@@ -110,8 +129,15 @@ void mqttLoop() {
   if (!isWifiConnected()) {
     wifiConnectedMessagePrinted = false;
 
-    if (!wifiBeginCalled || currentMs - previousWifiAttemptMs >= MQTT_RECONNECT_INTERVAL_MS) {
+    if (wifiRetryPending) {
+      if (currentMs - wifiRetryStartedMs >= WIFI_RETRY_SETTLE_MS) {
+        startWifiConnection();
+      }
+    } else if (!wifiBeginCalled) {
       startWifiConnection();
+    } else if (currentMs - previousWifiAttemptMs >= WIFI_RECONNECT_INTERVAL_MS) {
+      // Let the driver settle before writing the STA configuration for the next attempt.
+      scheduleWifiRetry();
     }
 
     return;

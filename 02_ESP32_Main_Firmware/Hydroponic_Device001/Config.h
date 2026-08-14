@@ -71,6 +71,8 @@ const unsigned long DEFAULT_PULSE_MS = 5000;
 
 // MQTT timing and client identity.
 const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
+const unsigned long WIFI_RECONNECT_INTERVAL_MS = 30000;
+const unsigned long WIFI_RETRY_SETTLE_MS = 1000;
 const unsigned long MQTT_PUBLISH_INTERVAL_MS = 30000;
 const uint16_t MQTT_PACKET_BUFFER_SIZE = 1024;
 // Safe MQTT/API pump pulse limits.

@@ -34,6 +34,19 @@ test('USB Stage 1 alert topic is reserved and unused', () => {
   assert.match(stageReadme, /RESERVED\/UNUSED/);
 });
 
+test('firmware retries slow Wi-Fi handshakes only after a nonblocking STA settle window', () => {
+  const config = fs.readFileSync(path.join(firmwareDir, 'Config.h'), 'utf8');
+  const mqttService = fs.readFileSync(path.join(firmwareDir, 'MqttService.cpp'), 'utf8');
+  assert.equal((mqttService.match(/WiFi\.begin\(/g) || []).length, 1);
+  assert.match(mqttService, /WiFi\.setAutoReconnect\(true\)/);
+  assert.match(mqttService, /WiFi\.disconnect\(false, false\)/);
+  assert.match(mqttService, /currentMs - previousWifiAttemptMs >= WIFI_RECONNECT_INTERVAL_MS/);
+  assert.match(mqttService, /currentMs - wifiRetryStartedMs >= WIFI_RETRY_SETTLE_MS/);
+  assert.match(mqttService, /wifi_sta_disconnected\.reason/);
+  assert.match(config, /WIFI_RECONNECT_INTERVAL_MS = 30000/);
+  assert.match(config, /WIFI_RETRY_SETTLE_MS = 1000/);
+});
+
 test('Stage 1 broker template requires authentication and has no wildcard bind', () => {
   const broker = fs.readFileSync(path.join(stage1Dir, 'mosquitto.stage1.conf.example'), 'utf8');
   assert.match(broker, /allow_anonymous false/);
@@ -54,6 +67,7 @@ test('firmware source contains independent subscription, Serial, local, and GPIO
   assert.match(firmware, /if \(ACTUATORS_LOCKED\)[\s\S]*enforceActuatorSafetyLock\(\)/);
   assert.match(pumps, /mainPumpEffectiveState\(on\)/);
   assert.match(pumps, /nutrientPumpEffectiveState\(on\)/);
+  assert.match(pumps, /spareEffectiveState\(on\)/);
   assert.match(pumps, /writePumpOutput\(PIN_PUMP_MAIN, false\)/);
   assert.match(pumps, /writePumpOutput\(PIN_PUMP_A, false\)/);
   assert.match(pumps, /writePumpOutput\(PIN_PUMP_B, false\)/);

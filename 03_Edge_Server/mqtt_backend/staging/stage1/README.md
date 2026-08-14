@@ -15,6 +15,13 @@ Set `STAGE1_WIFI_SSID` and `STAGE1_WIFI_PASSWORD` in the current PowerShell proc
 only when preparing a later physical flash. Stage 1 Preflight itself does not upload or connect
 an ESP32.
 
+The firmware starts Wi-Fi once, allows a 30-second handshake window, and uses a nonblocking
+one-second STA settle period before a retry. It never calls `WiFi.begin()` repeatedly while the
+driver is still connecting. Serial output includes the ESP-IDF disconnect reason code so an AP
+distance, antenna, authentication, or security-policy problem can be separated from MQTT and
+topic failures. Keep the ESP32-WROOM-32U external antenna attached and test within reliable
+2.4 GHz coverage.
+
 ```powershell
 $env:STAGE1_WIFI_SSID = '<staging Wi-Fi SSID>'
 $env:STAGE1_WIFI_PASSWORD = '<staging Wi-Fi password>'
