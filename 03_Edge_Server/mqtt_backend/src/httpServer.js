@@ -14,19 +14,38 @@ function buildCorsOptions() {
   };
 }
 
-function startHttpServer() {
+function buildHttpApp(options = {}) {
   const app = express();
-  const port = Number.parseInt(process.env.HTTP_PORT || '3001', 10);
-  const host = process.env.HTTP_HOST || null;
-  const publicDir = path.join(__dirname, '..', 'public');
+  const publicDir = options.publicDir || path.join(__dirname, '..', 'public');
+  const frontendDir = options.frontendDir || path.join(__dirname, '..', '..', 'frontend', 'dist');
 
   app.use(cors(buildCorsOptions()));
   app.use(express.json());
   app.use(deviceRoutes);
-  app.get('/', (request, response) => {
-    response.sendFile(path.join(publicDir, 'index.html'));
-  });
+  app.use(express.static(frontendDir));
   app.use(express.static(publicDir));
+  app.get('*', (request, response, next) => {
+    if (request.path.startsWith('/api/') || request.path === '/health') {
+      next();
+      return;
+    }
+
+    response.sendFile(path.join(frontendDir, 'index.html'), (error) => {
+      if (!error) {
+        return;
+      }
+
+      response.sendFile(path.join(publicDir, 'index.html'));
+    });
+  });
+
+  return app;
+}
+
+function startHttpServer() {
+  const app = buildHttpApp();
+  const port = Number.parseInt(process.env.HTTP_PORT || '3001', 10);
+  const host = process.env.HTTP_HOST || null;
 
   const onListening = () => {
     const displayHost = host || 'localhost';
@@ -58,6 +77,7 @@ function closeHttpServer() {
 }
 
 module.exports = {
+  buildHttpApp,
   startHttpServer,
   closeHttpServer,
 };

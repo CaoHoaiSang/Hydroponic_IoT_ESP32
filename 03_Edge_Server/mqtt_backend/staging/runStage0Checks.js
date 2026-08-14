@@ -338,8 +338,8 @@ async function main() {
     assert.equal(dashboard.status, 200);
     assert.equal(dashboardApp.status, 200);
     assert.equal(dashboardStyles.status, 200);
-    assert.match(dashboardHtml, /Hydroponic/i);
-    assert.match(dashboardHtml, /Auto Dosing/i);
+    assert.match(dashboardHtml, /HydroFlow|Hydroponic/i);
+    assert.match(`${dashboardHtml}\n${dashboardAppSource}`, /Auto Dosing/i);
     assert.match(dashboardAppSource, /loadDashboard/);
 
     const pulseAttempt = await fetchJson(`/api/devices/${DEVICE_ID}/pump-command`, {

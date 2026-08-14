@@ -20,6 +20,9 @@ credentials.json
 *.zip
 build/
 dist/
+*.tsbuildinfo
+playwright-report/
+test-results/
 coverage/
 .cache/
 .vscode/

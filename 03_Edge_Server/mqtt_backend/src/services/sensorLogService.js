@@ -8,9 +8,9 @@ const {
   isV2Telemetry,
 } = require('./telemetryIdentityService');
 const { validateSensorPayload } = require('../validators/sensorPayloadValidator');
+const { TELEMETRY_MAX_FUTURE_SKEW_MS } = require('../config/phase22Config');
 
 const TELEMETRY_PROCESSING_LEASE_MS = 30000;
-const TELEMETRY_MAX_FUTURE_SKEW_MS = 5000;
 const ESP32_MILLIS_MODULUS = 0x100000000;
 
 function isDuplicateKeyError(error) {
@@ -25,6 +25,10 @@ function buildQualityFields(payload, calibration, stability, control) {
     tdsMax: payload.tdsMax,
     tdsSampleCount: payload.tdsSampleCount,
     tdsSpreadRaw: payload.tdsSpreadRaw,
+    tdsRobustMin: payload.tdsRobustMin ?? null,
+    tdsRobustMax: payload.tdsRobustMax ?? null,
+    tdsRobustSpreadRaw: payload.tdsRobustSpreadRaw ?? null,
+    tdsTrimmedSampleCount: payload.tdsTrimmedSampleCount ?? null,
     tdsWindowStable: payload.tdsWindowStable,
     tdsVoltage25: calibration.tdsVoltage25,
     ecUsCm: calibration.ecUsCm,
@@ -350,9 +354,16 @@ async function saveSensorPayload(payload, topic, receivedAt = new Date()) {
       ...calibration,
       ...identity,
       measurementAt: timing.measurementAt,
+      tdsMin: payload.tdsMin,
+      tdsRaw: payload.tdsRaw,
+      tdsMax: payload.tdsMax,
       tdsWindowStable: payload.tdsWindowStable,
       tdsSampleCount: payload.tdsSampleCount,
       tdsSpreadRaw: payload.tdsSpreadRaw,
+      tdsRobustMin: payload.tdsRobustMin,
+      tdsRobustMax: payload.tdsRobustMax,
+      tdsRobustSpreadRaw: payload.tdsRobustSpreadRaw,
+      tdsTrimmedSampleCount: payload.tdsTrimmedSampleCount,
     };
     const stability = await evaluateTdsStability(payload.deviceId, currentCandidate, now);
     const control = buildControlValidity(

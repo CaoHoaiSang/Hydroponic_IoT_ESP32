@@ -28,13 +28,13 @@ void pumpsBegin() {
 }
 
 void setPumpMain(bool on) {
-  const bool effectiveOn = actuatorEffectiveState(on);
+  const bool effectiveOn = mainPumpEffectiveState(on);
   pumpMainState = effectiveOn;
   writePumpOutput(PIN_PUMP_MAIN, effectiveOn);
 }
 
 void setPumpA(bool on) {
-  on = actuatorEffectiveState(on);
+  on = nutrientPumpEffectiveState(on);
   if (on && pumpBState) {
     setPumpB(false);
   }
@@ -44,7 +44,7 @@ void setPumpA(bool on) {
 }
 
 void setPumpB(bool on) {
-  on = actuatorEffectiveState(on);
+  on = nutrientPumpEffectiveState(on);
   if (on && pumpAState) {
     setPumpA(false);
   }
@@ -54,7 +54,7 @@ void setPumpB(bool on) {
 }
 
 void setPumpSpare(bool on) {
-  const bool effectiveOn = actuatorEffectiveState(on);
+  const bool effectiveOn = spareEffectiveState(on);
   pumpSpareState = effectiveOn;
   writePumpOutput(PIN_PUMP_SPARE, effectiveOn);
 }
@@ -67,18 +67,22 @@ void turnAllPumpsOff() {
 }
 
 void enforceActuatorSafetyLock() {
-  if (!ACTUATORS_LOCKED) {
-    return;
+  if (!MAIN_PUMP_ACTUATION_ENABLED) {
+    pumpMainState = false;
+    writePumpOutput(PIN_PUMP_MAIN, false);
   }
 
-  pumpMainState = false;
-  pumpAState = false;
-  pumpBState = false;
-  pumpSpareState = false;
-  writePumpOutput(PIN_PUMP_MAIN, false);
-  writePumpOutput(PIN_PUMP_A, false);
-  writePumpOutput(PIN_PUMP_B, false);
-  writePumpOutput(PIN_PUMP_SPARE, false);
+  if (!NUTRIENT_PUMP_ACTUATION_ENABLED) {
+    pumpAState = false;
+    pumpBState = false;
+    writePumpOutput(PIN_PUMP_A, false);
+    writePumpOutput(PIN_PUMP_B, false);
+  }
+
+  if (!SPARE_ACTUATION_ENABLED) {
+    pumpSpareState = false;
+    writePumpOutput(PIN_PUMP_SPARE, false);
+  }
 }
 
 bool getPumpMain() {

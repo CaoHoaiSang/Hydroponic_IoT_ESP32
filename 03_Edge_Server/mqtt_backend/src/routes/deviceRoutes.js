@@ -63,6 +63,7 @@ const {
   saveTdsCalibration,
   validateTdsCalibrationSet,
 } = require('../services/tdsCalibrationService');
+const { getSystemCapabilities } = require('../services/systemCapabilityService');
 
 const router = express.Router();
 
@@ -101,6 +102,13 @@ router.get('/health', (request, response) => {
     mongoConnected: isMongoConnected(),
     mqttConnected: isMqttConnected(),
     uptimeSec: Math.floor(process.uptime()),
+  });
+});
+
+router.get('/api/system/capabilities', (request, response) => {
+  response.json({
+    ok: true,
+    data: getSystemCapabilities(),
   });
 });
 

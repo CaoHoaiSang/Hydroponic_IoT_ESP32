@@ -86,8 +86,8 @@ void printHelp() {
   Serial.println("Available commands:");
   Serial.println("  help");
   Serial.println("  status");
-  if (ACTUATORS_LOCKED) {
-    Serial.println("  Actuator commands are disabled by the USB Stage 1 profile.");
+  if (!SERIAL_ACTUATOR_COMMANDS_ENABLED) {
+    Serial.println("  Serial actuator commands are disabled by the build profile.");
     return;
   }
   Serial.println("  all_off");
@@ -179,9 +179,12 @@ void setPulseTargetOff(PulseTarget target) {
 }
 
 void setPulseTargetOn(PulseTarget target) {
-  if (ACTUATORS_LOCKED) {
+  const bool targetAllowed =
+    (target == PULSE_MAIN && MAIN_PUMP_ACTUATION_ENABLED) ||
+    ((target == PULSE_A || target == PULSE_B) && NUTRIENT_PUMP_ACTUATION_ENABLED);
+  if (!targetAllowed) {
     enforceActuatorSafetyLock();
-    Serial.println("Rejected: USB Stage 1 actuator lock is active");
+    Serial.println("Rejected: actuator target is disabled by build profile");
     return;
   }
 
@@ -256,15 +259,15 @@ PulseTarget pumpToPulseTarget(const String& pump) {
 
 unsigned long maxDurationForPump(const String& pump) {
   if (pump == "main") {
-    return MQTT_PUMP_MAIN_MAX_DURATION_MS;
+    return min(MQTT_PUMP_MAIN_MAX_DURATION_MS, PROFILE_MAIN_PUMP_MAX_DURATION_MS);
   }
 
   if (pump == "A") {
-    return MQTT_PUMP_A_MAX_DURATION_MS;
+    return min(MQTT_PUMP_A_MAX_DURATION_MS, PROFILE_NUTRIENT_PUMP_MAX_DURATION_MS);
   }
 
   if (pump == "B") {
-    return MQTT_PUMP_B_MAX_DURATION_MS;
+    return min(MQTT_PUMP_B_MAX_DURATION_MS, PROFILE_NUTRIENT_PUMP_MAX_DURATION_MS);
   }
 
   return 0;
@@ -289,9 +292,12 @@ String normalizePumpName(String pump) {
 }
 
 void startPulse(PulseTarget target, unsigned long durationMs, bool fromMqtt, const PumpCommand& command) {
-  if (ACTUATORS_LOCKED) {
+  const bool targetAllowed =
+    (target == PULSE_MAIN && MAIN_PUMP_ACTUATION_ENABLED) ||
+    ((target == PULSE_A || target == PULSE_B) && NUTRIENT_PUMP_ACTUATION_ENABLED);
+  if (!targetAllowed) {
     enforceActuatorSafetyLock();
-    Serial.println("Rejected: USB Stage 1 actuator lock is active");
+    Serial.println("Rejected: actuator target is disabled by build profile");
     return;
   }
 
@@ -522,9 +528,9 @@ void handlePumpCommandPayload(const String& payload) {
 
   PumpCommand command = parsePumpCommandPayload(payload);
 
-  if (ACTUATORS_LOCKED || !MQTT_PUMP_COMMANDS_ENABLED) {
+  if (!MQTT_PUMP_COMMANDS_ENABLED) {
     enforceActuatorSafetyLock();
-    rejectPumpCommand(command, "Rejected: USB Stage 1 actuator lock is active");
+    rejectPumpCommand(command, "Rejected: MQTT pump commands are disabled by build profile");
     return;
   }
 
@@ -538,6 +544,10 @@ void handlePumpCommandPayload(const String& payload) {
   }
 
   if (command.action == "set") {
+    if (!MAIN_PUMP_CONTINUOUS_ENABLED) {
+      rejectPumpCommand(command, "Rejected: continuous main pump control is disabled by build profile");
+      return;
+    }
     handleMainPumpSetCommand(command);
     return;
   }
@@ -550,6 +560,12 @@ void handlePumpCommandPayload(const String& payload) {
   PulseTarget target = pumpToPulseTarget(command.pump);
   if (target == PULSE_NONE) {
     rejectPumpCommand(command, "Rejected: invalid pump");
+    return;
+  }
+
+  if ((target == PULSE_MAIN && !MAIN_PUMP_ACTUATION_ENABLED) ||
+      ((target == PULSE_A || target == PULSE_B) && !NUTRIENT_PUMP_ACTUATION_ENABLED)) {
+    rejectPumpCommand(command, "Rejected: pump is disabled by build profile");
     return;
   }
 
@@ -630,9 +646,9 @@ void handleCommand(String command) {
     return;
   }
 
-  if (ACTUATORS_LOCKED && isSerialActuatorCommand(command)) {
+  if (!SERIAL_ACTUATOR_COMMANDS_ENABLED && isSerialActuatorCommand(command)) {
     enforceActuatorSafetyLock();
-    Serial.println("Rejected: USB Stage 1 actuator lock is active");
+    Serial.println("Rejected: Serial actuator commands are disabled by build profile");
     return;
   }
 
@@ -755,11 +771,19 @@ void setup() {
   Serial.println(MQTT_PUMP_COMMANDS_ENABLED ? MQTT_TOPIC_PUMP_CMD : "DISABLED");
   Serial.print("MQTT pump status topic: ");
   Serial.println(MQTT_TOPIC_PUMP_STATUS);
-  Serial.println(ACTUATORS_LOCKED
-    ? "Actuator lock: ON - all pump outputs are forced OFF."
-    : "Manual Serial commands are enabled.");
+  Serial.print("Main pump actuation: ");
+  Serial.println(MAIN_PUMP_ACTUATION_ENABLED ? "ENABLED" : "LOCKED OFF");
+  Serial.print("Pump A/B actuation: ");
+  Serial.println(NUTRIENT_PUMP_ACTUATION_ENABLED ? "ENABLED" : "LOCKED OFF");
+  Serial.print("Pump A/B pulse hard cap: ");
+  Serial.print(PROFILE_NUTRIENT_PUMP_MAX_DURATION_MS);
+  Serial.println(" ms");
+  Serial.print("Serial actuator commands: ");
+  Serial.println(SERIAL_ACTUATOR_COMMANDS_ENABLED ? "ENABLED" : "DISABLED");
   Serial.println("WARNING: Pump A/B MQTT/API commands are pulse-only.");
-  Serial.println("WARNING: Main pump MQTT/API supports continuous set on/off.");
+  Serial.println(MAIN_PUMP_CONTINUOUS_ENABLED
+    ? "WARNING: Main pump MQTT/API supports continuous set on/off."
+    : "SAFETY: Continuous main pump control is disabled by build profile.");
   Serial.println("WARNING: Use clean water only for Pump A/B tests.");
   Serial.println("WARNING: Main pump speed controller is hardware-only.");
 
@@ -778,6 +802,7 @@ void loop() {
     enforceActuatorSafetyLock();
   } else {
     updatePulse();
+    enforceActuatorSafetyLock();
   }
   mqttLoop();
   sensorsUpdate(currentMs);

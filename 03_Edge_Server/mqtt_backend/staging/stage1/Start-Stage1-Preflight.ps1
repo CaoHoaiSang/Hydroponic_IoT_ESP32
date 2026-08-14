@@ -29,14 +29,22 @@ try {
       backend = [ordered]@{ username = 'stage1_backend'; password = New-Stage1Secret }
       device = [ordered]@{ username = 'stage1_device'; password = New-Stage1Secret }
       auditor = [ordered]@{ username = 'stage1_auditor'; password = New-Stage1Secret }
+      operator = [ordered]@{ username = 'stage2_main_operator'; password = New-Stage1Secret }
     } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $paths.CredentialsFile -Encoding UTF8
   }
   $credentials = Get-Content -LiteralPath $paths.CredentialsFile -Raw | ConvertFrom-Json
+  if (-not $credentials.PSObject.Properties['operator']) {
+    $credentials | Add-Member -NotePropertyName operator -NotePropertyValue ([pscustomobject]@{
+      username = 'stage2_main_operator'
+      password = New-Stage1Secret
+    })
+    $credentials | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $paths.CredentialsFile -Encoding UTF8
+  }
 
   if (Test-Path -LiteralPath $paths.PasswordFile) { Remove-Item -LiteralPath $paths.PasswordFile -Force }
   & $passwordBinary -b -c $paths.PasswordFile $credentials.backend.username $credentials.backend.password | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'Failed to create Stage 1 password file' }
-  foreach ($account in @($credentials.device, $credentials.auditor)) {
+  foreach ($account in @($credentials.device, $credentials.auditor, $credentials.operator)) {
     & $passwordBinary -b $paths.PasswordFile $account.username $account.password | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Failed to append Stage 1 password account' }
   }
@@ -120,7 +128,7 @@ listener $Stage1MqttPort $lanAddress
   $wifiConfigured = -not [string]::IsNullOrWhiteSpace($env:STAGE1_WIFI_SSID) -and -not [string]::IsNullOrWhiteSpace($env:STAGE1_WIFI_PASSWORD)
   $wifiSsid = if ($wifiConfigured) { $env:STAGE1_WIFI_SSID } else { 'SET_STAGE1_WIFI_SSID_BEFORE_FLASH' }
   $wifiPassword = if ($wifiConfigured) { $env:STAGE1_WIFI_PASSWORD } else { 'SET_STAGE1_WIFI_PASSWORD_BEFORE_FLASH' }
-  @"
+  $firmwareSecrets = @"
 #ifndef SECRETS_STAGE1_H
 #define SECRETS_STAGE1_H
 #define WIFI_SSID "$(ConvertTo-Stage1CString $wifiSsid)"
@@ -130,7 +138,12 @@ listener $Stage1MqttPort $lanAddress
 #define MQTT_USERNAME "$(ConvertTo-Stage1CString $credentials.device.username)"
 #define MQTT_PASSWORD "$(ConvertTo-Stage1CString $credentials.device.password)"
 #endif
-"@ | Set-Content -LiteralPath $paths.FirmwareSecrets -Encoding ASCII
+"@
+  [IO.File]::WriteAllText(
+    $paths.FirmwareSecrets,
+    $firmwareSecrets,
+    [Text.UTF8Encoding]::new($false)
+  )
 
   [pscustomobject]@{
     Stage='Phase22B-Stage1-Preflight'; StartedAtUtc=[DateTime]::UtcNow.ToString('o'); LanAddress=$lanAddress

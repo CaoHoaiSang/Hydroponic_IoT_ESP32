@@ -1,6 +1,7 @@
 # MQTT Backend - Hydroponic_IoT_ESP32
 
-The Node.js backend keeps the MQTT-to-MongoDB flow, exposes REST API endpoints, and serves Dashboard Web V1.
+The Node.js backend keeps the MQTT-to-MongoDB flow, exposes REST API endpoints, and serves
+the legacy dashboard or the built HydroFlow React/Vite SPA.
 
 Data flow:
 
@@ -8,6 +9,32 @@ Data flow:
 ESP32 -> MQTT Broker -> Node.js Edge Server -> MongoDB
 Browser Dashboard -> Node.js Edge Server REST API -> MongoDB
 ```
+
+## HydroFlow React/Vite Integration
+
+The redesigned UI is in `../frontend`. Build it before starting the Backend:
+
+```powershell
+npm run build:local-ui
+npm start
+```
+
+Express serves API routes first, then `../frontend/dist`, with SPA deep-link fallback for
+non-API routes. `/api/*` and `/health` are never swallowed by the fallback.
+
+Integrated runtime sources:
+
+- `GET /health`
+- `GET /api/system/capabilities`
+- `GET /api/devices/:deviceId/latest`
+- `GET /api/devices/:deviceId/sensor-logs?limit=100`
+- EC/TDS calibration-set APIs and supported CSV export APIs
+
+`/api/system/capabilities` is fail-closed by default. Manual pump controls require verified
+server-side capability metadata and unlocked publisher/service configuration. Query strings
+cannot unlock controls. Auto Dosing remains locked OFF in Phase 22 and the React UI provides
+no enable path. AI, Cloud, zone/rack/season persistence, historical chart series, and system
+resource metrics are explicitly read-only or not integrated.
 
 ## Phase 22A Fix 1 Telemetry Identity And Shadow Mode
 
@@ -72,8 +99,10 @@ ADC median -> voltage -> voltage25 -> active EC calibration set
 - Only `devices.activeTdsCalibrationSetId` is used for control.
 - Active sets are immutable and legacy points are never activated automatically.
 - Outside the active voltage range, `ecUsCm` and `tdsPpm` are null; no extrapolation is used.
-- Firmware sends 30-sample median quality fields; backend requires three stable payloads.
-- Backend independently enforces `tdsWindowStable === (tdsSampleCount === 30 && tdsSpreadRaw <= 50)`.
+- Firmware sends a 30-sample median plus full and robust ADC-window diagnostics; backend requires three stable payloads.
+- Current firmware trims three samples per side for the stability decision, requires the retained 24-sample spread to be at most 50 raw counts, and keeps a full-window hard cap of 80 counts.
+- Backend independently validates robust bounds/count/spread and the hard cap. Legacy payloads without robust fields remain limited to the original full-window spread of 50.
+- Stability timing uses the same verified uptime-anchor future-skew tolerance as telemetry identity: small receive jitter up to 5 seconds is accepted, while larger future skew fails closed.
 - Accepted sensor rows and `devices.latest` contain explicit `receivedAt` and uptime-derived
   `measurementAt`; unverified timing fails closed.
 - Post-mixing completion requires `measurementAt > mixingUntil` and the same still-active calibration set used at run start.

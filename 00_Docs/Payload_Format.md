@@ -16,6 +16,10 @@
   "tdsMax": 1844,
   "tdsSampleCount": 30,
   "tdsSpreadRaw": 29,
+  "tdsRobustMin": 1818,
+  "tdsRobustMax": 1841,
+  "tdsRobustSpreadRaw": 23,
+  "tdsTrimmedSampleCount": 24,
   "tdsWindowStable": true,
   "waterTemp": 26.4,
   "waterTempValid": true,
@@ -34,14 +38,23 @@ field but is incomplete or inconsistent is rejected. A payload with no identity 
 is labeled legacy and may be stored for history, but cannot update `devices.latest`,
 contribute to stability, enter Shadow eligibility, or reach control.
 
-The backend also enforces the exact firmware relationship:
+New firmware removes the three lowest and three highest ADC samples only for the
+window-stability decision. The full minimum, maximum, and spread remain visible and a hard
+full-window cap prevents large outliers from being hidden:
 
 ```text
-tdsWindowStable = (tdsSampleCount == 30 && tdsSpreadRaw <= 50)
+tdsWindowStable = (
+  tdsSampleCount == 30
+  && tdsTrimmedSampleCount == 24
+  && tdsRobustSpreadRaw <= 50
+  && tdsSpreadRaw <= 80
+)
 ```
 
-A boolean that disagrees with sample count/spread is rejected. Stability evaluation checks
-the relationship again and does not trust the boolean alone.
+A boolean that disagrees with the sample count, robust bounds, retained count, robust spread,
+or absolute spread is rejected. Stability evaluation checks the relationship again and does
+not trust the boolean alone. Legacy firmware payloads without robust fields remain bound to
+the original `tdsSpreadRaw <= 50` rule and do not receive the relaxed absolute cap.
 
 ## Stored Measurement Quality Contract
 
@@ -49,6 +62,7 @@ Each accepted V2 `sensor_logs` row and `devices.latest` includes:
 
 `measurementAt`, `receivedAt`, `measurementFreshnessVerified`, `measurementTimeSource`,
 `measurementAgeAtReceiptMs`, `tdsRaw`, `tdsVoltage`, `tdsMin`, `tdsMax`, `tdsSampleCount`, `tdsSpreadRaw`,
+`tdsRobustMin`, `tdsRobustMax`, `tdsRobustSpreadRaw`, `tdsTrimmedSampleCount`,
 `tdsWindowStable`, `tdsVoltage25`, `ecUsCm`, `tdsPpm`, `tdsFactor`, `tdsScale`,
 `tdsCalibrationSetId`, `tdsCalibrationMode`, `tdsCalibrationPointCount`,
 `tdsCalibrationInRange`, `tdsCalibrationWarning`, `tdsTemperatureCompensated`,

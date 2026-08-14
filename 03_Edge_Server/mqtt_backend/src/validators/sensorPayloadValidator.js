@@ -3,8 +3,11 @@ const {
   TDS_ADC_REFERENCE_VOLTAGE,
   TDS_ADC_VOLTAGE_TOLERANCE,
   TDS_SENSOR_MAX_VOLTAGE,
+  TDS_WINDOW_MAX_ABSOLUTE_SPREAD_RAW,
+  TDS_WINDOW_MAX_ROBUST_SPREAD_RAW,
   TDS_WINDOW_MAX_SPREAD_RAW,
   TDS_WINDOW_SAMPLE_COUNT,
+  TDS_WINDOW_TRIMMED_SAMPLE_COUNT,
 } = require('../config/tdsQualityConfig');
 const { TELEMETRY_SCHEMA_VERSION } = require('../config/phase22Config');
 
@@ -15,6 +18,13 @@ function isObject(value) {
 function isNumber(value) {
   return typeof value === 'number' && Number.isFinite(value);
 }
+
+const ROBUST_WINDOW_FIELDS = [
+  'tdsRobustMin',
+  'tdsRobustMax',
+  'tdsRobustSpreadRaw',
+  'tdsTrimmedSampleCount',
+];
 
 function validateSensorPayload(payload) {
   const errors = [];
@@ -52,14 +62,52 @@ function validateSensorPayload(payload) {
   if (!Number.isInteger(payload.tdsSpreadRaw) || payload.tdsSpreadRaw < 0) errors.push('tdsSpreadRaw must be a non-negative integer');
   if (Number.isInteger(payload.tdsMin) && Number.isInteger(payload.tdsMax) && Number.isInteger(payload.tdsSpreadRaw)
     && payload.tdsSpreadRaw !== payload.tdsMax - payload.tdsMin) errors.push('tdsSpreadRaw must equal tdsMax minus tdsMin');
+  const robustFieldsPresent = ROBUST_WINDOW_FIELDS.filter((field) => (
+    Object.prototype.hasOwnProperty.call(payload, field)
+  ));
+  const hasRobustWindow = robustFieldsPresent.length === ROBUST_WINDOW_FIELDS.length;
+  if (robustFieldsPresent.length > 0 && !hasRobustWindow) {
+    errors.push('robust TDS window fields must be provided together');
+  }
+  if (hasRobustWindow) {
+    if (!Number.isInteger(payload.tdsRobustMin) || payload.tdsRobustMin < 0 || payload.tdsRobustMin > TDS_ADC_MAX) errors.push(`tdsRobustMin must be an integer from 0 to ${TDS_ADC_MAX}`);
+    if (!Number.isInteger(payload.tdsRobustMax) || payload.tdsRobustMax < 0 || payload.tdsRobustMax > TDS_ADC_MAX) errors.push(`tdsRobustMax must be an integer from 0 to ${TDS_ADC_MAX}`);
+    if (!Number.isInteger(payload.tdsRobustSpreadRaw) || payload.tdsRobustSpreadRaw < 0) errors.push('tdsRobustSpreadRaw must be a non-negative integer');
+    if (!Number.isInteger(payload.tdsTrimmedSampleCount) || payload.tdsTrimmedSampleCount < 0 || payload.tdsTrimmedSampleCount > TDS_WINDOW_SAMPLE_COUNT) errors.push(`tdsTrimmedSampleCount must be an integer from 0 to ${TDS_WINDOW_SAMPLE_COUNT}`);
+    if (Number.isInteger(payload.tdsRobustMin) && Number.isInteger(payload.tdsRobustMax)
+      && Number.isInteger(payload.tdsRobustSpreadRaw)
+      && payload.tdsRobustSpreadRaw !== payload.tdsRobustMax - payload.tdsRobustMin) {
+      errors.push('tdsRobustSpreadRaw must equal tdsRobustMax minus tdsRobustMin');
+    }
+    if (Number.isInteger(payload.tdsMin) && Number.isInteger(payload.tdsRobustMin)
+      && Number.isInteger(payload.tdsRaw) && Number.isInteger(payload.tdsRobustMax)
+      && Number.isInteger(payload.tdsMax)
+      && !(payload.tdsMin <= payload.tdsRobustMin
+        && payload.tdsRobustMin <= payload.tdsRaw
+        && payload.tdsRaw <= payload.tdsRobustMax
+        && payload.tdsRobustMax <= payload.tdsMax)) {
+      errors.push('robust TDS bounds must stay inside full bounds and contain tdsRaw');
+    }
+    if (payload.tdsSampleCount === TDS_WINDOW_SAMPLE_COUNT
+      && payload.tdsTrimmedSampleCount !== TDS_WINDOW_TRIMMED_SAMPLE_COUNT) {
+      errors.push(`tdsTrimmedSampleCount must equal ${TDS_WINDOW_TRIMMED_SAMPLE_COUNT} for a complete window`);
+    }
+  }
   if (typeof payload.tdsWindowStable !== 'boolean') errors.push('tdsWindowStable must be boolean');
   if (Number.isInteger(payload.tdsSampleCount)
     && Number.isInteger(payload.tdsSpreadRaw)
     && typeof payload.tdsWindowStable === 'boolean') {
-    const expectedWindowStable = payload.tdsSampleCount === TDS_WINDOW_SAMPLE_COUNT
-      && payload.tdsSpreadRaw <= TDS_WINDOW_MAX_SPREAD_RAW;
+    const expectedWindowStable = hasRobustWindow
+      ? payload.tdsSampleCount === TDS_WINDOW_SAMPLE_COUNT
+        && payload.tdsTrimmedSampleCount === TDS_WINDOW_TRIMMED_SAMPLE_COUNT
+        && payload.tdsRobustSpreadRaw <= TDS_WINDOW_MAX_ROBUST_SPREAD_RAW
+        && payload.tdsSpreadRaw <= TDS_WINDOW_MAX_ABSOLUTE_SPREAD_RAW
+      : payload.tdsSampleCount === TDS_WINDOW_SAMPLE_COUNT
+        && payload.tdsSpreadRaw <= TDS_WINDOW_MAX_SPREAD_RAW;
     if (payload.tdsWindowStable !== expectedWindowStable) {
-      errors.push(`tdsWindowStable must equal (tdsSampleCount === ${TDS_WINDOW_SAMPLE_COUNT} && tdsSpreadRaw <= ${TDS_WINDOW_MAX_SPREAD_RAW})`);
+      errors.push(hasRobustWindow
+        ? `tdsWindowStable must require ${TDS_WINDOW_SAMPLE_COUNT} samples, ${TDS_WINDOW_TRIMMED_SAMPLE_COUNT} retained samples, robust spread <= ${TDS_WINDOW_MAX_ROBUST_SPREAD_RAW}, and full spread <= ${TDS_WINDOW_MAX_ABSOLUTE_SPREAD_RAW}`
+        : `tdsWindowStable must equal (tdsSampleCount === ${TDS_WINDOW_SAMPLE_COUNT} && tdsSpreadRaw <= ${TDS_WINDOW_MAX_SPREAD_RAW})`);
     }
   }
   if (!(isNumber(payload.waterTemp) || payload.waterTemp === null)) errors.push('waterTemp must be a number or null');

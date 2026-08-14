@@ -12,9 +12,21 @@
 
 | Sensor | Sensor Pin | ESP32 Pin | Notes |
 |---|---|---|---|
-| DFRobot Gravity Analog TDS Sensor SEN0244 | AOUT | GPIO34 | Analog input only |
+| DFRobot Gravity Analog TDS Sensor SEN0244 | AOUT | GPIO34 | Analog input only; module output specification is 0-2.3V |
 | DS18B20 waterproof temperature sensor | DATA | GPIO4 | Requires 4.7k ohm pull-up resistor to 3.3V |
 | Water level float switch | Signal wire | GPIO27 | Other wire goes to Common GND |
+
+## Sensor Power Wiring
+
+| Sensor | Sensor Pin | ESP32 Connection | Notes |
+|---|---|---|---|
+| TDS SEN0244 | VCC / `+` | ESP32 `5V` | Official module input range is 3.3-5.5V; this project's verified configuration uses 5V |
+| TDS SEN0244 | GND / `-` | ESP32 GND / common GND | Required reference for AOUT |
+| TDS SEN0244 | AOUT / `A` | GPIO34 | Signal output is 0-2.3V, not the 5V supply rail |
+| DS18B20 | VCC | ESP32 `3V3` | DATA remains pulled up to 3.3V |
+| DS18B20 | GND | ESP32 GND / common GND | Common ground |
+
+SEN0244 reference: <https://wiki.dfrobot.com/sen0244/>.
 
 ## MOSFET Module Type
 
@@ -97,4 +109,10 @@ Do not place the speed controller before the MOSFET module power input. The spee
 - Main pump speed knob is hardware-only; ESP32 does not measure or control speed in software.
 - Use clean water only for Pump A/B testing before nutrient dosing calibration.
 - Never connect 5V signal directly to ESP32 GPIO.
+- SEN0244 `VCC -> 5V` is a power connection, not a GPIO signal connection. Only SEN0244
+  `AOUT` may connect to GPIO34, and the official AOUT range is 0-2.3V.
+- Deposits and trapped air bubbles on the TDS probe can cause a large reading drift. Rinse and
+  inspect the probe, remove bubbles, and wait for stable readings before calibration or dosing.
+- Do not recalibrate while the probe is fouled, bubbly, outside the calibration range, or
+  producing `tdsControlValid=false`.
 - ESP32 GND, MOSFET central 负, and adapter 12V GND must be connected together.

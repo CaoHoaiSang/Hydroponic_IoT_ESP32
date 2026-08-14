@@ -2,13 +2,13 @@
 
 ## 1. Last Updated
 
-- Date: 2026-08-11
+- Date: 2026-08-14
 - Updated by: Codex
 
 ## 2. Current Project Phase
 
-- Current phase: Source Consolidation and Workspace Cleanup
-- Short description: Accepted Phase 22A Fix 2, Phase 22B Stage 0, and Phase 22B Stage 1 Preflight changes are consolidated in the sole source-of-record repository. Checkpoint commits/tags, provenance manifests, regression evidence, firmware build evidence, and retained reports are in Git. Redundant compare/re-audit/build/baseline/patch trees were removed through the Recycle Bin. Physical USB Stage 1 remains paused and unverified.
+- Current phase: Phase 22B - Prototype Integration and Safety Validation Complete
+- Short description: Physical USB telemetry, Dashboard data flow, EC-first calibration, a clean 30-minute soak, bounded Main Pump operation, and actuator-locked restore passed. Pump A/B physical, calibration, MQTT pulse, and sequential clean-water dosing behavior were already passed in earlier phases. Stage 3 remains a compiled software-only profile and will not be physically rerun as a duplicate test. Auto Dosing remains OFF.
 
 ## 3. Completed Tasks
 
@@ -36,15 +36,30 @@
 | 20 | Phase 20C runtime test | Done | Monitoring cards, daily usage, V1/V2 runs, event log, and all CSV exports passed. |
 | 21 | Phase 20D documentation and runtime report | Done | Runtime evidence, report insert, demo checklist, and review package completed. |
 | 22 | Phase 21 EC/TDS safety hardening | Implemented | Automated tests pass; firmware compile and supervised runtime validation remain pending. |
-| 23 | Phase 21 Fix Round 1 audit remediation | Implemented | Stability contract, post-mixing timestamp/set guard, atomic run/Pump B claims, transactional lifecycle with checked fallback, migration classification, tests, and docs updated. Runtime remains unverified. |
+| 23 | Phase 21 Fix Round 1 audit remediation | Done | Stability contract, post-mixing timestamp/set guard, atomic run/Pump B claims, transactional lifecycle with checked fallback, migration classification, tests, and docs updated. Runtime was unverified at that historical checkpoint and was subsequently exercised by Phase 22B. |
 | 24 | Phase 21 Fix Round 2 cleanup and migration audit hardening | Implemented | Superseded artifacts removed, Phase 20 snapshots archived with warnings, README contradiction fixed, and migration completeness validation/tests expanded. Final verification and review package are recorded below. |
-| 25 | Phase 22A firmware compile and Telemetry Identity V2 | Done | Baseline and final compile passed with verified Arduino IDE toolchain; firmware was not uploaded. |
+| 25 | Phase 22A firmware compile and Telemetry Identity V2 | Done | Baseline and final compile passed with the verified Arduino IDE toolchain. It was not uploaded during Phase 22A; the later physical Stage 1 upload/runtime passed in task 33. |
 | 26 | Phase 22A duplicate/order/boot protection | Implemented | V2 validation, partial unique identity index, idempotent duplicate path, conservative boot transition, accepted-only latest, and distinct stability implemented. |
-| 27 | Phase 22A Shadow Mode | Implemented | Pure 30-gate engine, one decision per accepted measurement, read-only APIs, dashboard status/history, and zero-side-effect tests implemented. Runtime test on operational services is waiting. |
+| 27 | Phase 22A Shadow Mode | Done | Pure 30-gate engine, one decision per accepted measurement, read-only APIs, dashboard status/history, and zero-side-effect tests passed in isolated staging and with physical USB telemetry. No pump command or dosing run was created. |
 | 28 | Phase 22A Fix 2 independent re-audit | Done | Expired `PROCESSING` lease claim is now atomic by state, lease, and attempt. Full suite: 173 passed, 0 failed, 0 skipped. Full Arduino compile passed; no upload. |
 | 29 | Phase 22B Stage 0 isolated staging | Done | Real isolated MongoDB/MQTT/backend/Dashboard runtime PASS on ports 27018/18884/3100. Stop/reset/start repeatability PASS; Auto Dosing OFF, zero pump command, zero dosing run. |
-| 30 | Phase 22B Stage 1 Preflight | Partial | LAN MQTT/auth/ACL, topic parity, actuator lock, lifecycle, runtime integration, regression, and full profile compile passed. Physical Wi-Fi path is not configured or tested; no firmware upload or hardware use occurred. |
+| 30 | Phase 22B Stage 1 Preflight | Done | LAN MQTT/auth/ACL, topic parity, actuator lock, lifecycle, runtime integration, regression, and full profile compile passed. |
 | 31 | Source Consolidation and Workspace Cleanup | Done | Main Git history preserved; accepted changes merged by verified diff; 181 tests and 47 syntax checks passed; Stage 1 firmware profile compiled; six redundant trees and generated artifacts were removed. |
+| 32 | HydroFlow Local React/Vite UI integration | Done | Express SPA serving, real health/snapshot/sensor-log/calibration adapters, fail-closed capability contract, Windows launchers, responsive UI, acceptance tests, local runtime, and physical ESP32 data display passed. |
+| 33 | Phase 22B Stage 1 Physical USB telemetry | Done | USB Stage 1 profile uploaded on COM5. ESP32 joined isolated staging, authenticated to MQTT, and published real V2 telemetry. Pump Main/A/B remained OFF; Auto Dosing OFF; zero pump commands, dosing runs, and pump logs. |
+| 34 | Missing TDS value dashboard diagnostics | Done | Confirmed sensor input ADC 2536 / 2.044 V with a stable 30-sample window. Frontend now shows raw ADC/voltage and an explicit missing-calibration message instead of a blank, zero-converted null, or retained design value. |
+| 35 | Phase 22B EC/TDS calibration set | Done | Three stable monotonic points saved and validated: 796 µS/cm / 398 ppm, 1340 µS/cm / 670 ppm, and 1670 µS/cm / 835 ppm. Operator explicitly approved activation; the set is now active while Auto Dosing remains OFF. |
+| 36 | Active calibration runtime comparison | Done | Runtime TDS is 670.27 ppm versus handheld 673 ppm. The active EC-first set remains in range and the error is about -0.4%. |
+| 37 | Phase 22B TDS robust-window stability fix | Done | Firmware trims 3 ADC samples per side for stability only, requires robust spread <= 50 and absolute spread <= 80. Backend independently validates the complete contract and tolerates only the existing verified 5-second uptime-anchor future skew. Regression 198/198, USB Stage 1 compile/upload, and five consecutive physical runtime samples passed with `tdsStable=true` and `tdsControlValid=true`. |
+| 38 | Phase 22B 30-minute read-only telemetry soak | Done | Clean rerun PASS: 60 contiguous samples (`seq 88-147`), one boot, max interval 30.105 s, all stable/control-valid, TDS 664.79 ppm average with 0.90 ppm standard deviation, water normal, pumps OFF, and zero command/run/log activity. |
+| 39 | Phase 22B Stage 2 main-pump safety preflight | Done | Read-only software preflight PASS and regression 200/200. Its physical gate was subsequently completed by task 40. |
+| 40 | Phase 22B Stage 2 bounded Main Pump physical test | Done | Regression 207/207. Four forbidden commands rejected, then one single-use 1000 ms Main Pump pulse produced `started/completed`; operator confirmed normal physical run/stop. Two matching execution logs, zero dosing runs. Operator ACL removed, 12 V disconnected, and profile 1 restore compile/upload/Serial lock verification passed. |
+| 41 | Phase 22B post-restore TDS recovery observation | Done with monitoring caveat | Read-only checker implemented. Final corrected 5-minute run passed 10/10 contiguous stable/control-valid samples at 688.10-711.87 ppm. One earlier single-measurement stability rejection recovered on the next payload. Regression 209/209; zero pump commands and zero dosing runs; Auto Dosing OFF and all pumps OFF. |
+| 42 | Phase 22B extended TDS and connectivity observation | Superseded | The historical drift/control-invalid result led to the wiring review and probe cleaning in tasks 43-44. It is retained as fault evidence and is no longer the current phase blocker. |
+| 43 | SEN0244 power-document correction and physical cause identification | Done | Confirmed project wiring `VCC -> ESP32 5V`, `AOUT -> GPIO34`; official board input 3.3-5.5V and AOUT 0-2.3V. Corrected stale 3V3 checklist. Operator cleaned deposits and removed trapped bubbles; post-clean runtime is tracked separately. |
+| 44 | SEN0244 post-clean prototype revalidation | Accepted by operator | Sustained drift resolved. First 15-minute run settled to 14 consecutive valid samples; second run had 29/30 valid with one isolated rejected ADC window followed by six valid samples. Operator accepted this section for prototype progression; TDS remains an Auto Dosing advisory when invalid. |
+| 45 | Phase 22B Stage 3 Pump A/B clean-water software preflight | Done (software only) | Profile 3 permits only mutually exclusive A/B MQTT pulses capped at 1000 ms; Main/spare/Serial/set locked. Read-only preflight, compile, regression 213/213, and syntax 55/55 passed. No upload or physical rerun was performed. Prior T07/T08, MQTT Pump Command, Pump Calibration, and clean-water sequential A/B tests remain the accepted physical evidence. |
+| 46 | Phase 22B closure and source baseline | Done | Current docs reconciled. Backend 213/213, frontend unit 5/5, Playwright 24/24, JavaScript syntax 56/56, diff check, secret/path checks, and a fresh USB_STAGE1 firmware compile passed. Git checkpoint recorded in `CODEX_PHASE22B_FINAL_REPORT.md`. |
 
 ## 4. Created Folders
 
@@ -125,6 +140,38 @@ Phase 22B Stage 0 created:
 - `03_Edge_Server/mqtt_backend/test/stage0Safety.test.js`
 - `CODEX_PHASE22B_STAGE0_REPORT.md`
 
+Phase 22B TDS Stability Fix created:
+
+- `03_Edge_Server/mqtt_backend/staging/stage1/Restart-Stage1-Backend.ps1`
+- `03_Edge_Server/mqtt_backend/staging/stage1/Run-Stage1-TelemetrySoak.ps1`
+- `CODEX_PHASE22B_TDS_STABILITY_FIX_FINAL_REPORT.md`
+
+Phase 22B Stage 2 Safety Preflight created:
+
+- `03_Edge_Server/mqtt_backend/staging/stage1/checkStage2ActuatorReadiness.js`
+- `00_Docs/PHASE22B_STAGE2_MAIN_PUMP_SAFETY_PLAN.md`
+- `CODEX_PHASE22B_STAGE2_PREFLIGHT_REPORT.md`
+- `03_Edge_Server/mqtt_backend/staging/stage1/Prepare-Stage2-MainPumpRuntime.ps1`
+- `03_Edge_Server/mqtt_backend/staging/stage1/Verify-Stage2-Firmware.ps1`
+- `03_Edge_Server/mqtt_backend/staging/stage1/Arm-Stage2-MainPumpPulse.ps1`
+- `03_Edge_Server/mqtt_backend/staging/stage1/runStage2MainPumpPulse.js`
+- `03_Edge_Server/mqtt_backend/staging/stage1/runStage2RejectedCommandChecks.js`
+- `03_Edge_Server/mqtt_backend/staging/stage1/Disable-Stage2-MainPumpRuntime.ps1`
+- `03_Edge_Server/mqtt_backend/staging/stage1/Verify-Stage1-Restore.ps1`
+- `03_Edge_Server/mqtt_backend/test/fixtures/stage2_main_pump_lock_host_test.cpp`
+
+Phase 22B post-restore TDS recovery created:
+
+- `03_Edge_Server/mqtt_backend/staging/stage1/Run-Stage1-TdsRecoveryCheck.ps1`
+- `CODEX_PHASE22B_TDS_RECOVERY_REPORT.md`
+
+Phase 22B Stage 3 Pump A/B preflight created:
+
+- `03_Edge_Server/mqtt_backend/staging/stage1/checkStage3NutrientPumpReadiness.js`
+- `03_Edge_Server/mqtt_backend/test/fixtures/stage3_nutrient_pump_lock_host_test.cpp`
+- `00_Docs/PHASE22B_STAGE3_NUTRIENT_PUMP_SAFETY_PLAN.md`
+- `CODEX_PHASE22B_STAGE3_PREFLIGHT_REPORT.md`
+
 Source Consolidation created:
 
 - `00_Docs/Phase_Reports/`
@@ -132,6 +179,52 @@ Source Consolidation created:
 - `00_Docs/Manifests/`
 
 ## 6. Modified Files
+
+Phase 22B TDS Stability Fix:
+
+- Firmware `Config.h`, `Sensors.h/.cpp`, and `PayloadBuilder.cpp`: robust 30-sample ADC window and telemetry fields.
+- Backend TDS quality config, validator, quality service, and sensor persistence: independently validate and store the robust contract.
+- Backend TDS, stability, and telemetry tests: cover bounded outliers, hard caps, forged relationships, payload budget, and legacy fail-closed behavior.
+- Root/backend/staging README files and `00_Docs/Payload_Format.md`: document the current contract and safe backend restart command.
+- `00_Docs/PROJECT_STATUS_REPORT.md`: record compile, upload, physical runtime, and safety evidence.
+- Stage 1 soak runner and README: prevent Windows standby and document a repeatable read-only 30-minute validation.
+- `CODEX_PHASE22B_TDS_STABILITY_FIX_FINAL_REPORT.md`: add complete soak command, statistics, safety counters, and remaining limits.
+
+Phase 22B Stage 2 Safety Preflight:
+
+- `03_Edge_Server/mqtt_backend/test/stage1PreflightSafety.test.js`: prove the readiness checker is isolated, read-only, fail-closed, and cannot open the physical gate.
+- `00_Docs/PROJECT_STATUS_REPORT.md`: record the passed software gate and pending physical confirmation.
+- Firmware `BuildProfile.h`, `ActuatorSafety.h`, `Config.h`, `MqttService.cpp`, `Pumps.cpp`, and `Hydroponic_Device001.ino`: add the bounded Stage 2 Main Pump-only profile without weakening Stage 1 or operational topic identity.
+- `03_Edge_Server/mqtt_backend/staging/stage1/Start-Stage1-Preflight.ps1`: create a runtime-only dormant operator credential; default Stage 1 ACL still grants it no command permission.
+- `03_Edge_Server/mqtt_backend/staging/stage1/README.md`: document prepare, verify, arm, one-shot, and restore flow.
+- `03_Edge_Server/mqtt_backend/test/stage1PreflightSafety.test.js`: native/source tests for Stage 1 preservation, Stage 2 GPIO policy, runtime ACL, arm token, and fixed one-shot command.
+
+Phase 22B post-restore TDS recovery:
+
+- `03_Edge_Server/mqtt_backend/staging/stage1/README.md`: document the repeatable read-only recovery command and pass gates.
+- `03_Edge_Server/mqtt_backend/test/stage1PreflightSafety.test.js`: prove the recovery script is read-only and fail-closed across telemetry, calibration, water, actuator, and dosing gates.
+- `CODEX_PHASE22B_STAGE2_PREFLIGHT_REPORT.md`: append post-restore TDS runtime evidence.
+- `00_Docs/PROJECT_STATUS_REPORT.md`: replace the stale null-TDS advisory with the measured recovery and transient caveat.
+- `00_Docs/Pin_Map.md`: record the verified SEN0244 5V project supply, 0-2.3V AOUT boundary, and fouling/bubble warning.
+- `00_Docs/Wiring_Checklist.md`: replace stale TDS 3V3 wiring with 5V and add probe-cleaning, bubble, placement, and control-valid checks.
+
+Phase 22B Stage 3 Pump A/B preflight:
+
+- Firmware `BuildProfile.h`, `Config.h`, `MqttService.cpp`, and `Hydroponic_Device001.ino`: add the isolated Pump A/B-only profile and 1000 ms hard cap while preserving Stage 1/2/operational profiles.
+- `03_Edge_Server/mqtt_backend/test/stage1PreflightSafety.test.js`: native/source/read-only tests for Stage 3 profile and physical plan.
+- `03_Edge_Server/mqtt_backend/staging/stage1/README.md`: document Stage 3 software gate and physical isolation boundary.
+- `00_Docs/PROJECT_STATUS_REPORT.md`: record compile, regression, readiness, and closed physical gate.
+
+Phase 22B Stage 1 Physical USB:
+
+- `03_Edge_Server/mqtt_backend/staging/runStage0Checks.js`: accept the HydroFlow SPA identity and inspect loaded dashboard assets for Auto Dosing text.
+- `03_Edge_Server/mqtt_backend/staging/stage1/Start-Stage1-Preflight.ps1`: write generated firmware staging secrets as UTF-8 without BOM so Unicode SSIDs are preserved.
+- `00_Docs/PROJECT_STATUS_REPORT.md`: record physical USB results and remaining limits.
+- `CODEX_PHASE22B_STAGE1_FINAL_REPORT.md`: consolidated secret-safe handoff evidence.
+- `03_Edge_Server/frontend/src/adapters/types.ts`: add raw TDS and calibration quality fields to the device snapshot contract.
+- `03_Edge_Server/frontend/src/adapters/BackendApiAdapter.ts`: preserve null calibrated values and map raw diagnostics.
+- `03_Edge_Server/frontend/src/adapters/BackendApiAdapter.test.ts`: verify null ppm/EC, raw diagnostic mapping, and the backend string contract for scale `"500"`.
+- `03_Edge_Server/frontend/src/App.tsx`: display uncalibrated state, ADC, voltage, and remove retained design-value fallback from runtime views.
 
 Phase 20D:
 
@@ -298,6 +391,15 @@ Source Consolidation added or updated:
 - Settings guardrails: mixing delay minimum 60000 ms, step <= per-run maximum, per-run maximum <= daily maximum, enable confirmation, testing delay warning, and disabled presets.
 - Hybrid Local-first alignment: dosing logic runs locally on the Hydroponic Edge AI Gateway / Local Control Server represented by the local Node.js backend + MQTT broker + dashboard.
 - MongoDB remains in use for this prototype.
+- Phase 22B USB Stage 1: firmware profile `USB_STAGE1` is physically uploaded and publishes authenticated telemetry to isolated staging topic `stage1/hydroponic/device001/sensor`.
+- Phase 22B actuator state: firmware reports command subscription disabled and actuator lock ON; persisted Pump Main/A/B states are all false.
+- Phase 22B pre-Stage-2 safety baseline: Auto Dosing false, observed pump commands 0, `dosing_runs` 0, and `pump_logs` 0 before actuator testing.
+- Phase 22B 30-minute soak: 60 contiguous accepted measurements from one boot; all windows stable/control-valid, max interval 30.105 s, no reconnect, TDS average 664.79 ppm with 0.90 ppm standard deviation.
+- Phase 22B Stage 2 preflight: `READY_FOR_OPERATOR_PHYSICAL_CONFIRMATION`; `physicalGateOpen=false`, no firmware upload, no MQTT publish, and no database write.
+- Phase 22B Stage 2 profile validation: `USB_STAGE2_MAIN_PUMP` was uploaded for the bounded test. Main Pump accepted pulse only with a 3000 ms hard cap; A/B/spare, Serial actuator ON, and continuous set stayed locked. Four negative commands were rejected before the one authorized pulse.
+- Phase 22B Stage 2 physical result: one 1000 ms Main Pump pulse completed and was observed physically; runtime command permission and arm token were removed immediately afterward. Final firmware is `USB_STAGE1` with all pumps locked OFF and no command subscription.
+- Phase 22B post-restore TDS: active-set calibrated values recovered. The final corrected 5-minute check passed 10/10 samples at 688.10-711.87 ppm with all samples stable/control-valid/in-range. One earlier transient was rejected fail-closed and recovered on the next payload.
+- Phase 22B extended observation: one stale-start/new-boot event exposed a checker gap, now fixed with initial freshness, explicit boot-transition, and MQTT reconnect gates. The corrected 15-minute run then failed on sustained ADC/TDS drift despite stable individual firmware windows.
 
 ## 10. Phase 20B–20C Runtime Validation Summary
 
@@ -400,17 +502,35 @@ Example verified safety event:
 
 ## 11. Known Issues and Limitations
 
+### Phase 22B Closure Verification
+
+| Check | Result | Notes |
+|---|---|---|
+| Backend regression | PASS | `npm test`: 213 passed, 0 failed, 0 skipped. |
+| Frontend verification | PASS | ESLint, TypeScript, 5 unit tests, and production build passed. |
+| Browser acceptance | PASS | Playwright: 24 passed, 0 failed. |
+| JavaScript syntax | PASS | 56 files passed `node --check`. |
+| Firmware compile | PASS | `USB_STAGE1`: flash 939020 bytes (71%), static RAM 47240 bytes (14%), no upload. |
+| Diff check | PASS | `git diff --check` exit 0; Windows line-ending warnings only. |
+| Secret/path checks | PASS | No runtime `.env`, `Secrets.h`, credential file, archive, dependency tree, or build output is included. Known Wi-Fi password occurrence count is zero. |
+| Runtime side effects | NONE | No service start, database write, MQTT publish, firmware upload, Auto Dosing action, or pump operation occurred during closure. |
+
 - Auto Dosing V2 is rule-based closed-loop step dosing, not Adaptive Dosing.
 - Daily reset changes only the software calculation window and cannot remove nutrient physically added to the reservoir.
 - Event logging is monitoring-only; failures are warned without interrupting the working dosing sequence.
-- Phase 22A Fix 2 full Arduino compile passed with the verified ESP32 toolchain; firmware upload and ESP32/hardware runtime remain untested.
+- Phase 22A/22B firmware compile and physical USB Stage 1 runtime passed. The final ESP32 state was verified as the actuator-locked `USB_STAGE1` profile after the Stage 2 Main Pump test.
 - MongoDB transaction behavior and unique partial indexes are tested with a fake repository but not verified on the operational MongoDB topology/data.
 - Operational migration dry-run has not run because it would connect to the database.
 - Migration completeness is tested with fake rows only; it has not been compared with a sanitized copy of operational calibration data.
 - Phase 22A adds firmware `measurementId`/sequence and requires three distinct accepted V2 measurements; duplicate, legacy, out-of-order, old-boot, and unconfirmed-boot rows do not count.
-- The initial raw-spread and three-payload stability thresholds need confirmation from real logs.
-- Existing TDS calibration rows are legacy and are not valid for automatic control.
-- No active EC calibration set was created or activated during this task.
+- The robust-window thresholds passed a continuous 30-minute test against the current reservoir and ESP32/SEN0244 setup, but still need longer multi-day observation before any autonomous operation.
+- Historical post-reset and extended observations detected null/unstable TDS and a sustained ADC drop. The backend correctly failed closed. The operator identified probe deposits and trapped bubbles, then cleaned and stabilized the probe; task 44 supersedes the historical blocker.
+- Post-clean runtime no longer shows the sustained ADC collapse. Strict revalidation is still partial because one isolated 30-sample firmware window had full/robust spread 269/221 despite 29/30 control-valid measurements in the second run.
+- SEN0244 VCC is intentionally connected to ESP32 5V in the current project. AOUT, not VCC, connects to GPIO34 and must remain within the module's 0-2.3V output specification.
+- Stage 3 is software-prepared and compiled but intentionally not uploaded. It is retained as an optional bounded diagnostic profile, not as an unfinished requirement. Pump A/B physical behavior is supported by the earlier passed T07/T08, MQTT pulse, calibration, and clean-water sequential dosing tests.
+- One ESP32 boot change and one backend MQTT reconnect were observed during earlier diagnostics. Subsequent physical telemetry and Dashboard operation passed, but hotspot continuity is not qualified for unattended production use.
+- Historical TDS calibration rows remain legacy and are not valid for automatic control; the explicit active set is authoritative.
+- No calibration set was created, modified, retired, or activated during the recovery observation.
 - The two ordered Hanna HI70031 packets have no measurement result and represent only one distinct EC reference.
 - Auto Dosing does not auto-start the main pump in this phase.
 - Handheld TDS meters still differ in absolute readings.
@@ -423,17 +543,14 @@ Example verified safety event:
 - No Device Enrollment, AI Model OTA, Zalo OA, or AI Camera.
 - Stage 0 is loopback-only and intentionally anonymous; it is not a production security configuration.
 - `npm audit` still reports indirect `body-parser` (low) and `ip-address` (high) findings; no dependency was automatically upgraded in Stage 0.
-- Physical USB Stage 1 remains unverified: no staging Wi-Fi credential was configured, no firmware was uploaded, and no ESP32 or hardware was connected during consolidation.
+- Physical USB Stage 1 robust telemetry is verified with `waterLevel=normal`, active EC/TDS calibration, three distinct stable measurements, and explicit control-valid status.
+- Set `tds_set_1786679483159_b8f307f8` remains active. The final recovery check measured 688.10-711.87 ppm with 10/10 samples control-valid. Auto Dosing remains OFF; Pump Main/A/B are OFF; `dosing_runs` remains zero. Six Stage 2 audit/execution rows remain intentionally retained in `pump_logs`.
 - `D:\Hydroponic_IoT_ESP32.rar` was not deleted because it was not one of the exact authorized cleanup targets and was not used as source.
 - Four Phase 21/22 artifacts remain under `D:\Download` because that directory is outside the authorized project cleanup scope; retained in-source copies have matching hashes where applicable.
 
 ## 12. Next Recommended Direction
 
-"Review `00_Docs/Phase_Reports/CODEX_SOURCE_CONSOLIDATION_REPORT.md`, then resume the
-supervised Physical USB Stage 1 procedure from the consolidated source. Keep Auto Dosing OFF,
-nutrient bottles disconnected, and pump power removed."
-
-Do not connect nutrient bottles or enable Auto Dosing during this validation.
+"Finish the Phase 22B source checkpoint and review the next product requirement before adding code. Do not repeat Pump A/B or generic multi-hour telemetry tests. A multi-day sensor/load observation is required only before a future decision to permit unattended automatic dosing."
 
 ### Future Phase 20D DOCX Updates
 
@@ -596,3 +713,87 @@ hardware operation occurred.
 ### Stage 0 Conclusion
 
 `READY_FOR_USB_STAGE1`
+
+## 18. HydroFlow Local UI Integration
+
+### Implemented
+
+- Added the React 19, TypeScript, Vite, Lucide, Vitest, and Playwright frontend under
+  `03_Edge_Server/frontend/`.
+- Express now serves API routes first, the built React SPA second, and preserves the legacy
+  public dashboard as fallback when no React build exists. Unknown `/api/*` routes remain 404.
+- Added `GET /api/system/capabilities`. Its default is fail-closed: actuator controls stay
+  disabled unless build metadata is explicitly verified and both pump locks are deliberately
+  removed server-side. Query parameters cannot unlock the UI.
+- Connected real Backend health, `device001` latest snapshot, the latest 100 sensor logs,
+  EC/TDS calibration-set workflow, supported CSV exports, and capability-gated manual pump APIs.
+- Removed fabricated runtime claims from sensor, pump, dosing, database, Cloud, and system
+  resource views. Unsupported areas are marked as read-only, browser-local, or not integrated.
+- Removed the ZIP's frontend mock-actuator fixture path. Browser controls now have only the real
+  Backend API path, protected by fail-closed capability metadata and existing Backend locks.
+- Auto Dosing remains OFF and has no enable or settings-write path in the React UI. AI and Cloud
+  have no service call, credential, MQTT publisher, or actuator path.
+
+### Created Files
+
+- `03_Edge_Server/frontend/`: complete React/Vite application, adapters, calibration wizard,
+  styles, unit test, Playwright acceptance suite, package lock, and tool configuration.
+- `03_Edge_Server/mqtt_backend/src/services/systemCapabilityService.js`: fail-closed capability
+  metadata builder.
+- `03_Edge_Server/mqtt_backend/test/systemCapabilities.test.js`: capability lock regression.
+- `03_Edge_Server/mqtt_backend/test/frontendIntegration.test.js`: SPA/API routing regression.
+- `03_Edge_Server/mqtt_backend/testSupport/startFrontendAcceptanceServer.js`: isolated browser
+  acceptance server; no operational MongoDB or MQTT.
+- `README_HYDROFLOW_LOCAL.md`: Windows startup, integration scope, and safety guide.
+- `START_FRONTEND_ONLY.bat`: frontend-only launcher.
+- `START_FULL_LOCAL.bat`: frontend build plus integrated Backend launcher.
+- `START_FULL_LOCAL.ps1`: Windows preflight and safe full-local runtime launcher.
+
+### Modified Files
+
+- `.gitignore`: frontend build/test/cache exclusions.
+- `README.md`: current HydroFlow integration status and startup commands.
+- `00_Docs/PROJECT_STATUS_REPORT.md`: this handoff entry.
+- `03_Edge_Server/mqtt_backend/.env.example`: locked capability metadata examples.
+- `03_Edge_Server/mqtt_backend/README.md`: React SPA/API integration and safety contract.
+- `03_Edge_Server/mqtt_backend/package.json`: frontend install/build/test commands.
+- `03_Edge_Server/mqtt_backend/src/httpServer.js`: reusable Express app plus SPA serving.
+- `03_Edge_Server/mqtt_backend/src/routes/deviceRoutes.js`: read-only capability endpoint.
+- `START_FULL_LOCAL.bat`: delegates to the preflight launcher and preserves clear error output.
+
+### Verification
+
+- Frontend `npm run verify`: PASS. ESLint PASS, TypeScript PASS, 3 unit tests passed, production
+  build passed with 1,584 modules transformed.
+- Frontend `npm run test:e2e`: PASS, 24 passed and 0 failed. Coverage includes 14 direct
+  deep-link/reload routes, fail-closed controls, query unlock rejection, Auto Dosing OFF,
+  calibration empty state, navigation, SPA/API fallback, and six responsive viewports without
+  horizontal document overflow.
+- Playwright Chromium revision 1234 was installed after the first browser run was blocked by a
+  missing executable. The rerun passed 24/24.
+- Backend `npm test`: PASS, 186 passed, 0 failed, 0 skipped.
+- Backend `node --check`: PASS for 50 JavaScript files.
+- `git diff --check`: PASS; only the repository's expected LF-to-CRLF conversion warnings were
+  reported on Windows.
+- Full-local launcher runtime: PASS on 2026-08-13. The repaired frontend dependencies built,
+  `/overview` returned HTTP 200, and `/health` reported MongoDB and MQTT connected. Capability
+  evidence was `LOCAL_UI_SAFE`, actuator locked, pump commands disabled, and Auto Dosing enable
+  unavailable. The verification Backend process was stopped afterward.
+
+### Runtime And Safety Status
+
+- Operational MongoDB/MQTT, ESP32, firmware, and hardware were not used.
+- No MQTT message, pump command, dosing run, calibration lifecycle change, or Auto Dosing enable
+  action occurred.
+- Frontend-only runtime correctly reports Backend disconnected and keeps actuators locked.
+- Zone/rack/season edits are browser-local drafts and are not a persisted Backend contract.
+- Physical USB Stage 1 read-only telemetry passed on 2026-08-14 with the 12V pump supply and nutrient lines disconnected.
+- The previous Windows launcher could leave an incomplete `node_modules` directory that passed
+  its directory-only check and later failed with `tsc is not recognized`. The new preflight
+  checks the actual `tsc.cmd`/`vite.cmd` executables and repairs dependencies when needed.
+
+### Next Recommended Task
+
+Run the integrated UI against the isolated Phase 22B staging environment, keep pump power
+removed and Auto Dosing OFF, then verify real `device001` sensor logs and calibration-set pages
+without changing calibration lifecycle state or issuing actuator commands.

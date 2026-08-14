@@ -56,6 +56,12 @@ The current phase focuses on sensor reading, pump control, MQTT data transmissio
 | Phase 21 Fix Round 1 | Close audit findings for measurement validity, post-mixing freshness, idempotency, lifecycle atomicity, migration classification, and documentation |
 | Phase 21 Fix Round 2 | Consolidate historical documentation, harden migration completeness auditing, and produce a secret-safe review package |
 | Phase 22A | Compile firmware, add Telemetry Identity V2, enforce duplicate/order/boot-session safety, and add side-effect-free Shadow Mode observation |
+| Phase 22B | Validate the isolated staging stack, physical USB telemetry, active EC/TDS calibration, dashboard data flow, bounded Main Pump operation, and actuator-locked restore |
+| Phase 22B closure | Consolidate evidence, preserve prior Pump A/B physical results, run final regression/security checks, and create a stable Git checkpoint |
+
+The next feature phase is intentionally not selected in this plan. It must be chosen from an
+explicit requirements review after the Phase 22B checkpoint instead of repeating already passed
+hardware or telemetry tests.
 
 ## D. Definition Of Done For Core Phase
 

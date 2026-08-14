@@ -5,9 +5,13 @@ const {
   TDS_STABILITY_MIN_SPREAD_PPM,
   TDS_STABILITY_REQUIRED_SAMPLES,
   TDS_STABILITY_WINDOW_MS,
+  TDS_WINDOW_MAX_ABSOLUTE_SPREAD_RAW,
+  TDS_WINDOW_MAX_ROBUST_SPREAD_RAW,
   TDS_WINDOW_MAX_SPREAD_RAW,
   TDS_WINDOW_SAMPLE_COUNT,
+  TDS_WINDOW_TRIMMED_SAMPLE_COUNT,
 } = require('../config/tdsQualityConfig');
+const { TELEMETRY_MAX_FUTURE_SKEW_MS } = require('../config/phase22Config');
 
 function isFiniteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value);
@@ -21,13 +25,38 @@ function median(values) {
     : sorted[middle];
 }
 
+function isMeasurementWithinStabilityWindow(measurementAt, now = new Date()) {
+  const measuredTime = measurementAt instanceof Date ? measurementAt.getTime() : Number.NaN;
+  const ageMs = now.getTime() - measuredTime;
+  return Number.isFinite(measuredTime)
+    && ageMs >= -TELEMETRY_MAX_FUTURE_SKEW_MS
+    && ageMs <= TDS_STABILITY_WINDOW_MS;
+}
+
 function isTdsWindowStable(sample) {
-  return Boolean(sample)
-    && sample.tdsWindowStable === true
-    && sample.tdsSampleCount === TDS_WINDOW_SAMPLE_COUNT
-    && Number.isInteger(sample.tdsSpreadRaw)
-    && sample.tdsSpreadRaw >= 0
-    && sample.tdsSpreadRaw <= TDS_WINDOW_MAX_SPREAD_RAW;
+  if (!sample) return false;
+  if (sample.tdsWindowStable !== true
+    || sample.tdsSampleCount !== TDS_WINDOW_SAMPLE_COUNT
+    || !Number.isInteger(sample.tdsMin)
+    || !Number.isInteger(sample.tdsRaw)
+    || !Number.isInteger(sample.tdsMax)
+    || !Number.isInteger(sample.tdsSpreadRaw)
+    || sample.tdsSpreadRaw < 0
+    || sample.tdsSpreadRaw !== sample.tdsMax - sample.tdsMin
+    || !(sample.tdsMin <= sample.tdsRaw && sample.tdsRaw <= sample.tdsMax)) return false;
+
+  const hasRobustWindow = ['tdsRobustMin', 'tdsRobustMax', 'tdsRobustSpreadRaw', 'tdsTrimmedSampleCount']
+    .every((field) => Number.isInteger(sample[field]));
+  if (!hasRobustWindow) return sample.tdsSpreadRaw <= TDS_WINDOW_MAX_SPREAD_RAW;
+
+  return sample.tdsTrimmedSampleCount === TDS_WINDOW_TRIMMED_SAMPLE_COUNT
+    && sample.tdsRobustSpreadRaw === sample.tdsRobustMax - sample.tdsRobustMin
+    && sample.tdsMin <= sample.tdsRobustMin
+    && sample.tdsRobustMin <= sample.tdsRaw
+    && sample.tdsRaw <= sample.tdsRobustMax
+    && sample.tdsRobustMax <= sample.tdsMax
+    && sample.tdsRobustSpreadRaw <= TDS_WINDOW_MAX_ROBUST_SPREAD_RAW
+    && sample.tdsSpreadRaw <= TDS_WINDOW_MAX_ABSOLUTE_SPREAD_RAW;
 }
 
 function calculateTdsStability(samples, options = {}) {
@@ -91,14 +120,8 @@ async function evaluateTdsStability(deviceId, current, now = new Date()) {
   if (!current.tdsCalibrationSetId || current.tdsMeasurementValid !== true) {
     return calculateTdsStability([], { requireIdentity: true });
   }
-  const currentMeasurementAt = current.measurementAt instanceof Date
-    ? current.measurementAt.getTime()
-    : Number.NaN;
-  const currentAgeMs = now.getTime() - currentMeasurementAt;
   if (current.measurementFreshnessVerified !== true
-    || !Number.isFinite(currentMeasurementAt)
-    || currentAgeMs < 0
-    || currentAgeMs > TDS_STABILITY_WINDOW_MS) {
+    || !isMeasurementWithinStabilityWindow(current.measurementAt, now)) {
     return calculateTdsStability([], { requireIdentity: true });
   }
   const database = getDb();
@@ -117,7 +140,6 @@ async function evaluateTdsStability(deviceId, current, now = new Date()) {
       tdsCalibrationSetId: current.tdsCalibrationSetId,
       tdsWindowStable: true,
       tdsSampleCount: TDS_WINDOW_SAMPLE_COUNT,
-      tdsSpreadRaw: { $lte: TDS_WINDOW_MAX_SPREAD_RAW },
       tdsMeasurementValid: true,
       tdsPpm: { $type: 'number' },
     })
@@ -158,6 +180,7 @@ function buildControlValidity(payload, calibration, stability, measurementAt, no
 
 module.exports = {
   median,
+  isMeasurementWithinStabilityWindow,
   isTdsWindowStable,
   calculateTdsStability,
   evaluateTdsStability,

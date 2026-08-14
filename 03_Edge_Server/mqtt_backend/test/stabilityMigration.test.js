@@ -1,7 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { calculateTdsStability } = require('../src/services/tdsQualityService');
+const {
+  calculateTdsStability,
+  isMeasurementWithinStabilityWindow,
+  isTdsWindowStable,
+} = require('../src/services/tdsQualityService');
 const { runLegacyMigration } = require('../scripts/migrateLegacyTdsCalibrations');
 const { getLegacyReasons } = require('../scripts/migrateLegacyTdsCalibrations');
 
@@ -32,6 +36,9 @@ function stableSample(tdsPpm, overrides = {}) {
     tdsPpm,
     tdsWindowStable: true,
     tdsSampleCount: 30,
+    tdsRaw: 100,
+    tdsMin: 90,
+    tdsMax: 110,
     tdsSpreadRaw: 20,
     tdsMeasurementValid: true,
     ...overrides,
@@ -66,6 +73,61 @@ test('window with 29 samples cannot contribute to stability', () => {
 test('window with raw spread 51 cannot contribute to stability', () => {
   const samples = [700, 705, 710].map((tdsPpm) => stableSample(tdsPpm, { tdsSpreadRaw: 51 }));
   assert.equal(calculateTdsStability(samples).tdsStable, false);
+});
+
+function robustStableSample(tdsPpm, overrides = {}) {
+  return stableSample(tdsPpm, {
+    tdsRaw: 2530,
+    tdsMin: 2496,
+    tdsMax: 2559,
+    tdsSpreadRaw: 63,
+    tdsRobustMin: 2510,
+    tdsRobustMax: 2545,
+    tdsRobustSpreadRaw: 35,
+    tdsTrimmedSampleCount: 24,
+    ...overrides,
+  });
+}
+
+test('robust window contributes when central spread and hard cap pass', () => {
+  const sample = robustStableSample(670);
+  assert.equal(isTdsWindowStable(sample), true);
+  assert.equal(calculateTdsStability([sample, robustStableSample(672), robustStableSample(674)]).tdsStable, true);
+});
+
+test('robust window fails closed above the absolute spread cap', () => {
+  assert.equal(isTdsWindowStable(robustStableSample(670, {
+    tdsMin: 2478,
+    tdsMax: 2559,
+    tdsSpreadRaw: 81,
+  })), false);
+});
+
+test('robust window fails closed above the retained spread cap', () => {
+  assert.equal(isTdsWindowStable(robustStableSample(670, {
+    tdsRobustMin: 2490,
+    tdsRobustMax: 2541,
+    tdsRobustSpreadRaw: 51,
+  })), false);
+});
+
+test('quality service rejects a forged full spread relationship', () => {
+  assert.equal(isTdsWindowStable(robustStableSample(670, { tdsSpreadRaw: 62 })), false);
+});
+
+test('stability timing accepts small verified uptime-anchor future skew', () => {
+  const now = new Date('2026-08-14T05:00:00.000Z');
+  assert.equal(isMeasurementWithinStabilityWindow(new Date(now.getTime() + 45), now), true);
+});
+
+test('stability timing rejects future skew above five seconds', () => {
+  const now = new Date('2026-08-14T05:00:00.000Z');
+  assert.equal(isMeasurementWithinStabilityWindow(new Date(now.getTime() + 5001), now), false);
+});
+
+test('stability timing rejects measurements older than 120 seconds', () => {
+  const now = new Date('2026-08-14T05:00:00.000Z');
+  assert.equal(isMeasurementWithinStabilityWindow(new Date(now.getTime() - 120001), now), false);
 });
 
 test('migration dry-run performs no writes', async () => {

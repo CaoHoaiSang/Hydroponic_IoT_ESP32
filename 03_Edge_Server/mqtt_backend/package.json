@@ -8,6 +8,11 @@
     "start": "node src/index.js",
     "dev": "node src/index.js",
     "test": "node --test",
+    "frontend:install": "npm --prefix ../frontend ci",
+    "frontend:build": "npm --prefix ../frontend run build",
+    "frontend:test": "npm --prefix ../frontend test",
+    "frontend:verify": "npm --prefix ../frontend run verify",
+    "build:local-ui": "npm run frontend:install && npm run frontend:build",
     "stage0:test": "node staging/runStage0Checks.js",
     "stage1:test": "node staging/stage1/runStage1PreflightChecks.js"
   },

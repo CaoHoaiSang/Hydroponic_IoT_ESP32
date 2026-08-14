@@ -33,7 +33,7 @@ static String escapeJsonString(const String& value) {
 
 String buildStatusPayload(const SensorData& data, const TelemetryIdentity& identity) {
   String payload;
-  payload.reserve(768);
+  payload.reserve(896);
 
   payload += "{\n";
   payload += "  \"schemaVersion\": ";
@@ -82,6 +82,22 @@ String buildStatusPayload(const SensorData& data, const TelemetryIdentity& ident
 
   payload += "  \"tdsSpreadRaw\": ";
   payload += data.tdsSpreadRaw;
+  payload += ",\n";
+
+  payload += "  \"tdsRobustMin\": ";
+  payload += data.tdsRobustMin;
+  payload += ",\n";
+
+  payload += "  \"tdsRobustMax\": ";
+  payload += data.tdsRobustMax;
+  payload += ",\n";
+
+  payload += "  \"tdsRobustSpreadRaw\": ";
+  payload += data.tdsRobustSpreadRaw;
+  payload += ",\n";
+
+  payload += "  \"tdsTrimmedSampleCount\": ";
+  payload += data.tdsTrimmedSampleCount;
   payload += ",\n";
 
   payload += "  \"tdsWindowStable\": ";

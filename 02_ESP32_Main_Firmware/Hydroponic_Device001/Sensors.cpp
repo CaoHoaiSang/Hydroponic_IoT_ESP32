@@ -69,9 +69,22 @@ static void updateTdsSummary() {
   latestData.tdsVoltage = medianRaw * 3.3 / 4095.0;
   latestData.tdsSampleCount = count;
   latestData.tdsSpreadRaw = latestData.tdsMax - latestData.tdsMin;
-  // Conservative initial software threshold; confirm it from real sensor logs.
+  latestData.tdsRobustMin = latestData.tdsMin;
+  latestData.tdsRobustMax = latestData.tdsMax;
+  latestData.tdsTrimmedSampleCount = count;
+
+  if (count == TDS_SAMPLE_COUNT
+    && count > TDS_WINDOW_TRIM_COUNT_PER_SIDE * 2) {
+    latestData.tdsRobustMin = sorted[TDS_WINDOW_TRIM_COUNT_PER_SIDE];
+    latestData.tdsRobustMax = sorted[count - TDS_WINDOW_TRIM_COUNT_PER_SIDE - 1];
+    latestData.tdsTrimmedSampleCount = count - TDS_WINDOW_TRIM_COUNT_PER_SIDE * 2;
+  }
+
+  latestData.tdsRobustSpreadRaw = latestData.tdsRobustMax - latestData.tdsRobustMin;
+  // Ignore a small number of ADC outliers, but retain a hard full-window safety cap.
   latestData.tdsWindowStable = count == TDS_SAMPLE_COUNT
-    && latestData.tdsSpreadRaw <= TDS_WINDOW_MAX_SPREAD_RAW;
+    && latestData.tdsRobustSpreadRaw <= TDS_WINDOW_MAX_ROBUST_SPREAD_RAW
+    && latestData.tdsSpreadRaw <= TDS_WINDOW_MAX_ABSOLUTE_SPREAD_RAW;
 }
 
 static void updateTdsSampling(unsigned long currentMs) {
@@ -119,6 +132,10 @@ void sensorsBegin() {
   latestData.tdsMax = 0;
   latestData.tdsSampleCount = 0;
   latestData.tdsSpreadRaw = 0;
+  latestData.tdsRobustMin = 0;
+  latestData.tdsRobustMax = 0;
+  latestData.tdsRobustSpreadRaw = 0;
+  latestData.tdsTrimmedSampleCount = 0;
   latestData.tdsWindowStable = false;
   latestData.waterTemp = 0;
   latestData.waterTempValid = false;

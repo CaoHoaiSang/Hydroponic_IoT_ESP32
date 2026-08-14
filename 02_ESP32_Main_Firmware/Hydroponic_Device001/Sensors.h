@@ -8,6 +8,10 @@ struct SensorData {
   int tdsMax;
   int tdsSampleCount;
   int tdsSpreadRaw;
+  int tdsRobustMin;
+  int tdsRobustMax;
+  int tdsRobustSpreadRaw;
+  int tdsTrimmedSampleCount;
   bool tdsWindowStable;
   float waterTemp;
   bool waterTempValid;

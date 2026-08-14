@@ -169,3 +169,44 @@ test('false stable flag is accepted when raw spread exceeds 50', () => {
   });
   assert.equal(validateSensorPayload(payload).ok, true);
 });
+
+function robustSensorPayload(overrides = {}) {
+  return validSensorPayload({
+    tdsMin: 68,
+    tdsMax: 131,
+    tdsRaw: 100,
+    tdsSpreadRaw: 63,
+    tdsRobustMin: 82,
+    tdsRobustMax: 118,
+    tdsRobustSpreadRaw: 36,
+    tdsTrimmedSampleCount: 24,
+    tdsWindowStable: true,
+    ...overrides,
+  });
+}
+
+test('robust window accepts bounded ADC outliers', () => {
+  assert.equal(validateSensorPayload(robustSensorPayload()).ok, true);
+});
+
+test('robust window rejects full spread above hard cap', () => {
+  const payload = robustSensorPayload({ tdsMin: 50, tdsMax: 131, tdsSpreadRaw: 81 });
+  assert.equal(validateSensorPayload(payload).ok, false);
+});
+
+test('robust window rejects central spread above 50', () => {
+  const payload = robustSensorPayload({
+    tdsRobustMin: 70,
+    tdsRobustMax: 121,
+    tdsRobustSpreadRaw: 51,
+  });
+  assert.equal(validateSensorPayload(payload).ok, false);
+});
+
+test('robust window rejects inconsistent retained sample count', () => {
+  assert.equal(validateSensorPayload(robustSensorPayload({ tdsTrimmedSampleCount: 25 })).ok, false);
+});
+
+test('robust window fields must be supplied as one contract', () => {
+  assert.equal(validateSensorPayload(validSensorPayload({ tdsRobustMin: 90 })).ok, false);
+});
