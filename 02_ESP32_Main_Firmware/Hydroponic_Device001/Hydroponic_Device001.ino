@@ -6,6 +6,7 @@
 // before any pump output is changed.
 
 #include "Config.h"
+#include "EcProbeSchedule.h"
 #include "MqttService.h"
 #include "PayloadBuilder.h"
 #include "Pumps.h"
@@ -86,6 +87,7 @@ void printHelp() {
   Serial.println("Available commands:");
   Serial.println("  help");
   Serial.println("  status");
+  Serial.println("  measure_ec (bounded; respects minimum sensor OFF time)");
   if (!SERIAL_ACTUATOR_COMMANDS_ENABLED) {
     Serial.println("  Serial actuator commands are disabled by the build profile.");
     return;
@@ -121,7 +123,9 @@ void publishLatestSensorPayload() {
       readAndStoreSensors();
     }
 
-    const TelemetryIdentity identity = createTelemetryMeasurementIdentity(millis());
+    const TelemetryIdentity identity = createTelemetryMeasurementIdentity(
+      latestSensorData.ecProbeMeasurementAtUptimeMs
+    );
     sensorPublishState.begin(buildStatusPayload(latestSensorData, identity), identity.measurementId);
   }
 
@@ -663,6 +667,12 @@ void handleCommand(String command) {
     printHelp();
   } else if (command == "status") {
     printImmediateStatus();
+  } else if (command == "measure_ec") {
+    if (sensorPublishState.pending()) {
+      Serial.println("EC measurement rejected: an earlier telemetry payload is pending retry");
+    } else {
+      requestEcProbeMeasurement(millis(), "manual");
+    }
   } else if (command == "all_off") {
     cancelActivePulse(true, "Pump command cancelled by all_off");
     turnAllPumpsOff();
@@ -786,10 +796,19 @@ void setup() {
     : "SAFETY: Continuous main pump control is disabled by build profile.");
   Serial.println("WARNING: Use clean water only for Pump A/B tests.");
   Serial.println("WARNING: Main pump speed controller is hardware-only.");
+  Serial.print("EC probe relay: GPIO");
+  Serial.print(PIN_EC_POWER_RELAY);
+  Serial.println(" active HIGH, default OFF");
+  Serial.print("EC duty cycle: ");
+  Serial.print(EC_PROBE_WARMUP_MS);
+  Serial.print(" ms warm-up, ");
+  Serial.print(EC_PROBE_MEASUREMENT_INTERVAL_MS);
+  Serial.println(" ms schedule, 35 s ON watchdog");
 
   printHelp();
   setMqttMessageHandler(handleMqttMessage);
   mqttBegin();
+  requestEcProbeMeasurement(millis(), "startup");
 }
 
 void loop() {
@@ -819,8 +838,24 @@ void loop() {
     printSensorStatus(latestSensorData);
   }
 
-  if (currentMs - previousMqttPublishMs >= MQTT_PUBLISH_INTERVAL_MS) {
+  bool measurementReady = ecProbeMeasurementReady();
+  if (measurementReady) {
+    latestSensorData = readSensors();
     previousMqttPublishMs = currentMs;
     publishLatestSensorPayload();
+    finishEcProbeMeasurement(millis());
+    latestSensorData = readSensors();
+  } else if (sensorPublishState.pending()
+    && currentMs - previousMqttPublishMs >= MQTT_PUBLISH_INTERVAL_MS) {
+    previousMqttPublishMs = currentMs;
+    publishLatestSensorPayload();
+  }
+
+  if (shouldStartEcProbeScheduledMeasurement(
+      measurementReady,
+      sensorPublishState.pending(),
+      ecProbeScheduledMeasurementDue(currentMs)
+    )) {
+    requestEcProbeMeasurement(currentMs, "scheduled");
   }
 }

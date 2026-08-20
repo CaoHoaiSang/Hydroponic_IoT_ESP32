@@ -3,9 +3,16 @@
 ## Before Powering Sensors
 
 - [ ] ESP32 powered by USB 5V only
-- [ ] TDS VCC connected to ESP32 5V (project configuration; SEN0244 accepts 3.3-5.5V)
+- [ ] TDS VCC connected to relay NO; relay COM connected to ESP32 5V
 - [ ] TDS AOUT connected to GPIO34
 - [ ] TDS GND connected to common GND
+- [ ] Relay VCC connected to ESP32 5V
+- [ ] Relay GND connected directly to ESP32 GND
+- [ ] Relay IN connected to GPIO32
+- [ ] 10k ohm pull-down resistor connected between relay IN and GND
+- [ ] Relay trigger jumper set to HIGH
+- [ ] Relay NC left disconnected
+- [ ] Relay stays OFF during ESP32 boot/reset
 - [ ] Confirm TDS AOUT is the signal pin and is not shorted to the 5V VCC pin
 - [ ] Confirm measured/observed TDS AOUT remains within the SEN0244 0-2.3V specification
 - [ ] TDS probe is rinsed and free of deposits
@@ -18,9 +25,18 @@
 - [ ] Float switch connected between GPIO27 and GND
 - [ ] No 5V signal goes into ESP32 GPIO
 
-The SEN0244 5V connection above powers the signal-conditioning board. It does not mean that 5V
-is connected to GPIO34. Only AOUT connects to GPIO34. Official SEN0244 specification:
+The relay switches the SEN0244 signal-conditioning board's 5V supply. It does not switch AOUT or
+GND and does not connect 5V to GPIO34. Only AOUT connects to GPIO34. Official specification:
 <https://wiki.dfrobot.com/sen0244/>.
+
+## Verified SEN0244 Relay Measurements
+
+- Relay-only pulse: physical click/LED ON then OFF passed.
+- Relay NO without sensor: 4.55V ON; approximately 300mV and falling when OFF.
+- SEN0244 connected: 4.57V ON; 53.9mV OFF.
+- SEN0244 AOUT with relay OFF: 0V; no observed back-power through GPIO34.
+- SEN0244 LED: ON only during the bounded relay pulse and OFF afterward.
+- Keep Auto Dosing and all pump outputs OFF while validating the measurement schedule.
 
 ## Before TDS Calibration Or Control Validation
 

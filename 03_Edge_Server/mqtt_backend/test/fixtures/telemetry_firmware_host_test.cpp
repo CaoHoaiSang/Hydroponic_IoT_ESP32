@@ -4,8 +4,14 @@
 
 #include "TelemetryPublishState.h"
 #include "TelemetrySequence.h"
+#include "EcProbeSchedule.h"
 
 int main() {
+  assert(!shouldStartEcProbeScheduledMeasurement(true, false, true));
+  assert(!shouldStartEcProbeScheduledMeasurement(false, true, true));
+  assert(!shouldStartEcProbeScheduledMeasurement(false, false, false));
+  assert(shouldStartEcProbeScheduledMeasurement(false, false, true));
+
   TelemetrySequenceCounter sequence;
   assert(sequence.next() == 1);
   assert(sequence.next() == 2);

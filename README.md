@@ -5,6 +5,17 @@ DS18B20 water temperature, water-level interlocks, MQTT, a local Edge Server, an
 
 ## Current Phase
 
+Phase 23D implements bounded SEN0244 power duty cycling with the validated prototype relay on
+GPIO32. Firmware starts with the relay OFF, warms the probe for 30 seconds, collects a fresh
+30-sample ADC window, publishes one Telemetry Identity V2 measurement, then returns the relay
+OFF. A 35-second watchdog, 60-second minimum OFF guard, and 15-minute schedule are enforced.
+The `USB_STAGE1` profile remains actuator locked and Auto Dosing remains OFF.
+
+Phase 23C read-only Auto Dosing monitoring remains present in the React dashboard. The duty-cycle
+measurement metadata is persisted by the Backend, while unsampled intervals intentionally become
+stale for control. The active calibration must be revalidated using the same duty-cycle protocol
+before any future dosing use.
+
 Phase 23B network transition is complete. The Stage 1 firmware now uses a nonblocking Wi-Fi
 retry state machine: one connection attempt may run for 30 seconds, then the STA is reset and
 allowed to settle for one second before credentials are applied again. Disconnect reason codes

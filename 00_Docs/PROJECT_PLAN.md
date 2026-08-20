@@ -60,10 +60,12 @@ The current phase focuses on sensor reading, pump control, MQTT data transmissio
 | Phase 22B closure | Consolidate evidence, preserve prior Pump A/B physical results, run final regression/security checks, and create a stable Git checkpoint |
 | Phase 23A | Harden demo startup, runtime freshness/offline recovery, isolated backup/restore, Shadow evidence, and zero-actuator acceptance checks |
 | Phase 23B | Harden nonblocking Wi-Fi recovery and move the actuator-locked Stage 1 telemetry path to a verified nearby hotspot |
+| Phase 23C | Integrate read-only Auto Dosing monitoring into the React dashboard and specify fail-closed EC probe duty-cycle protection |
+| Phase 23D | Validate the GPIO32 relay, measure SEN0244 settling, and integrate bounded EC probe duty cycling into actuator-locked Stage 1 telemetry |
 
-The next feature phase is intentionally not selected in this plan. It must be chosen from an
-explicit requirements review after the Phase 23B checkpoint instead of repeating already passed
-hardware or telemetry tests.
+Phase 23D uses the approved prototype relay on GPIO32, a measured 30-second warm-up, a fresh
+30-sample window, a 35-second ON watchdog, and a 15-minute schedule. Auto Dosing remains OFF.
+Post-mixing and calibration-specific measurement triggers remain future work.
 
 ## D. Definition Of Done For Core Phase
 

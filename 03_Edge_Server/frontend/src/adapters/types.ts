@@ -66,3 +66,95 @@ export type StableMeasurement = {
   waterTemp: number;
   stable: boolean;
 };
+
+export type AutoDosingSettings = {
+  deviceId: string;
+  mode: string;
+  enabled: boolean;
+  phase22LockedOff: boolean;
+  cropCode: string;
+  targetRangeConfirmed: boolean;
+  targetMinPpm: number | null;
+  targetMaxPpm: number | null;
+  stepDoseMlPerPump: number | null;
+  maxDoseMlPerPumpPerRun: number | null;
+  maxDailyDoseMlPerPump: number | null;
+  mixingDelayMs: number | null;
+  requireMainPumpOn: boolean;
+  lastEvaluationAt: string | null;
+  lastEvaluationReason: string | null;
+  lastEvaluationTdsPpm: number | null;
+};
+
+export type AutoDosingReadiness = {
+  ready: boolean;
+  reasons: string[];
+};
+
+export type DosingPumpStep = {
+  commandId: string | null;
+  durationMs: number | null;
+  status: string;
+};
+
+export type AutoDosingRun = {
+  runId: string;
+  status: string;
+  currentStep: string;
+  tdsPpmAtStart: number | null;
+  tdsPpmAfterMixing: number | null;
+  deltaTdsPpm: number | null;
+  stepDoseMlPerPump: number | null;
+  mixingDelayMs: number | null;
+  reason: string | null;
+  createdAt: string | null;
+  completedAt: string | null;
+  pumpA: DosingPumpStep;
+  pumpB: DosingPumpStep;
+};
+
+export type DailyDoseUsage = {
+  localDate: string | null;
+  dailyDoseUsedMlPerPump: number;
+  maxDailyDoseMlPerPump: number;
+  remainingDailyDoseMlPerPump: number;
+  progressPercentage: number;
+  isLimitReached: boolean;
+  runsCounted: number;
+};
+
+export type AutoDosingEvent = {
+  eventId: string;
+  eventType: string;
+  reason: string | null;
+  message: string;
+  tdsPpm: number | null;
+  createdAt: string | null;
+};
+
+export type AutoDosingEventSummary = {
+  windowHours: number;
+  total: number;
+  latest: AutoDosingEvent | null;
+};
+
+export type NutrientResponseTest = {
+  testId: string;
+  beforeDashboardPpm: number | null;
+  afterDashboardPpm: number | null;
+  deltaDashboardPpm: number | null;
+  estimatedResponsePpmPerMl: number | null;
+  createdAt: string | null;
+};
+
+export type AutoDosingMonitoringSnapshot = {
+  settings: AutoDosingSettings;
+  readiness: AutoDosingReadiness;
+  activeRun: AutoDosingRun | null;
+  runs: AutoDosingRun[];
+  dailyUsage: DailyDoseUsage;
+  events: AutoDosingEvent[];
+  eventSummary: AutoDosingEventSummary;
+  latestNutrientResponse: NutrientResponseTest | null;
+  loadedAt: string;
+};

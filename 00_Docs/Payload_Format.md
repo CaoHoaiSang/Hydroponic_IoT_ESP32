@@ -21,6 +21,12 @@
   "tdsRobustSpreadRaw": 23,
   "tdsTrimmedSampleCount": 24,
   "tdsWindowStable": true,
+  "ecProbePowerMode": "duty_cycle",
+  "ecProbePowered": true,
+  "ecProbeState": "READY",
+  "ecProbeWarmupMs": 30000,
+  "ecProbePoweredAtUptimeMs": 92300,
+  "ecProbeMeasurementTrigger": "scheduled",
   "waterTemp": 26.4,
   "waterTempValid": true,
   "waterLevel": "normal",
@@ -56,6 +62,12 @@ or absolute spread is rejected. Stability evaluation checks the relationship aga
 not trust the boolean alone. Legacy firmware payloads without robust fields remain bound to
 the original `tdsSpreadRaw <= 50` rule and do not receive the relaxed absolute cap.
 
+Duty-cycle fields are optional only for legacy compatibility. If any one is present, the Backend
+requires the complete group. A publishable duty-cycle measurement must describe the captured
+window as powered and `READY`; warming, incomplete, or unpowered data is rejected. The
+`ecProbePowered` value is an acquisition-time snapshot. Firmware switches the physical relay OFF
+immediately after the first publish attempt, including when MQTT is unavailable.
+
 ## Stored Measurement Quality Contract
 
 Each accepted V2 `sensor_logs` row and `devices.latest` includes:
@@ -63,7 +75,9 @@ Each accepted V2 `sensor_logs` row and `devices.latest` includes:
 `measurementAt`, `receivedAt`, `measurementFreshnessVerified`, `measurementTimeSource`,
 `measurementAgeAtReceiptMs`, `tdsRaw`, `tdsVoltage`, `tdsMin`, `tdsMax`, `tdsSampleCount`, `tdsSpreadRaw`,
 `tdsRobustMin`, `tdsRobustMax`, `tdsRobustSpreadRaw`, `tdsTrimmedSampleCount`,
-`tdsWindowStable`, `tdsVoltage25`, `ecUsCm`, `tdsPpm`, `tdsFactor`, `tdsScale`,
+`tdsWindowStable`, `ecProbePowerMode`, `ecProbePowered`, `ecProbeState`, `ecProbeWarmupMs`,
+`ecProbePoweredAtUptimeMs`, `ecProbeMeasurementTrigger`, `tdsVoltage25`, `ecUsCm`, `tdsPpm`,
+`tdsFactor`, `tdsScale`,
 `tdsCalibrationSetId`, `tdsCalibrationMode`, `tdsCalibrationPointCount`,
 `tdsCalibrationInRange`, `tdsCalibrationWarning`, `tdsTemperatureCompensated`,
 `tdsTemperatureAlphaPerC`, `tdsTemperatureFactorUsed`, `tdsTemperatureReferenceC`,

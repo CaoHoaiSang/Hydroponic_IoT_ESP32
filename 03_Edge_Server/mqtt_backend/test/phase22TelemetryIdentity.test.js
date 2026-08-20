@@ -216,7 +216,7 @@ test('production pump status handler cannot continue Auto Dosing sequence', asyn
 
 test('firmware source keeps all official GPIO assignments', () => {
   const source = fs.readFileSync(path.join(__dirname, '../../../02_ESP32_Main_Firmware/Hydroponic_Device001/Config.h'), 'utf8');
-  for (const line of ['PIN_TDS_ADC 34', 'PIN_DS18B20_DATA 4', 'PIN_WATER_LEVEL 27', 'PIN_PUMP_MAIN 25', 'PIN_PUMP_A 26', 'PIN_PUMP_B 14', 'PIN_PUMP_SPARE 33']) {
+  for (const line of ['PIN_TDS_ADC 34', 'PIN_DS18B20_DATA 4', 'PIN_WATER_LEVEL 27', 'PIN_EC_POWER_RELAY 32', 'PIN_PUMP_MAIN 25', 'PIN_PUMP_A 26', 'PIN_PUMP_B 14', 'PIN_PUMP_SPARE 33']) {
     assert.ok(source.includes(line));
   }
 });
@@ -251,10 +251,13 @@ test('representative maximum V2 payload plus MQTT topic fits the 1024-byte buffe
     tdsRaw: 4095, tdsVoltage: 2.3, tdsMin: 4095, tdsMax: 4095,
     tdsSampleCount: 30, tdsSpreadRaw: 50, tdsRobustMin: 4095, tdsRobustMax: 4095,
     tdsRobustSpreadRaw: 0, tdsTrimmedSampleCount: 24, tdsWindowStable: true,
+    ecProbePowerMode: 'duty_cycle', ecProbePowered: true, ecProbeState: 'READY',
+    ecProbeWarmupMs: 30000, ecProbePoweredAtUptimeMs: 4294936095,
+    ecProbeMeasurementTrigger: 'calibration',
     waterTemp: 50, waterTempValid: true, waterLevel: 'normal', pumpMain: true,
     pumpA: false, pumpB: false, pumpSpare: false, ph: null, uptimeMs: 4294967295,
   };
   const payloadBytes = Buffer.byteLength(JSON.stringify(row, null, 2));
-  const topicBytes = Buffer.byteLength('hydroponic/device001/sensor');
+  const topicBytes = Buffer.byteLength('stage1/hydroponic/device001/sensor');
   assert.ok(payloadBytes + topicBytes + 8 < 1024, `${payloadBytes} payload bytes exceed MQTT budget`);
 });

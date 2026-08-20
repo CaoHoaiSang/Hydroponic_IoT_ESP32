@@ -16,6 +16,33 @@ test("actuator controls are fail-closed", async ({ page }) => { await page.goto(
 test("query parameters cannot unlock production", async ({ page }) => { await page.goto("/zones/zone-nft-01/pumps?capabilities=unlocked"); await expect(page.getByText(/khóa|Backend chưa cấp/i).first()).toBeVisible(); });
 test("calibration starts with no active set", async ({ page }) => { await page.goto("/zones/zone-nft-01/calibration"); await expect(page.getByText("Chưa có active calibration set")).toBeVisible(); });
 test("Auto Dosing stays OFF", async ({ page }) => { await page.goto("/zones/zone-nft-01/auto-dosing"); await expect(page.getByText("OFF").first()).toBeVisible(); });
+
+test("Auto Dosing monitoring renders Backend data and remains read-only", async ({ page }) => {
+  await page.route("**/health", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, mongoConnected: true, mqttConnected: true }) }));
+  await page.route("**/api/system/capabilities", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, data: { buildProfile: "USB_STAGE1", actuatorsLocked: true, pumpCommandsEnabled: false, pumpMainCanSet: false, nutrientPumpCanPulse: false, autoDosingCanEnable: false, autoDosingLockReason: "usb_stage1_actuator_lock" } }) }));
+  await page.route("**/api/devices/device001/latest", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, deviceId: "device001", latest: { measurementAt: new Date().toISOString(), tdsPpm: null, ecUsCm: null, waterTemp: 27, waterLevel: "normal", pumpMain: false, tdsControlValid: false } }) }));
+  const fixtures: Record<string, unknown> = {
+    "/api/devices/device001/auto-dosing/settings": { ok: true, data: { deviceId: "device001", enabled: false, phase22LockedOff: true, cropCode: "cai_ngot", targetRangeConfirmed: true, targetMinPpm: 800, targetMaxPpm: 900, stepDoseMlPerPump: 1, maxDoseMlPerPumpPerRun: 1, maxDailyDoseMlPerPump: 2, mixingDelayMs: 900000, requireMainPumpOn: true, lastEvaluationReason: "disabled" } },
+    "/api/devices/device001/auto-dosing/readiness": { ok: true, data: { ready: false, reasons: ["tds_control_invalid", "main_pump_not_running"] } },
+    "/api/devices/device001/auto-dosing/active-run": { ok: true, data: null },
+    "/api/devices/device001/auto-dosing/runs?limit=10": { ok: true, data: [{ runId: "dose-browser-1", status: "completed", currentStep: "completed", tdsPpmAtStart: 700, tdsPpmAfterMixing: 730, stepDoseMlPerPump: 1, pumpA: { durationMs: 500, status: "completed" }, pumpB: { durationMs: 556, status: "completed" }, createdAt: "2026-08-15T01:00:00.000Z" }] },
+    "/api/devices/device001/auto-dosing/daily-usage": { ok: true, localDate: "2026-08-15", dailyDoseUsedMlPerPump: 1, maxDailyDoseMlPerPump: 2, remainingDailyDoseMlPerPump: 1, progressPercentage: 50, runsCounted: 1 },
+    "/api/devices/device001/auto-dosing/events?limit=10": { ok: true, data: [{ eventId: "event-browser-1", eventType: "run_completed", reason: "completed", tdsPpm: 730, createdAt: "2026-08-15T01:15:00.000Z" }] },
+    "/api/devices/device001/auto-dosing/events/summary": { ok: true, data: { windowHours: 24, total: 1, latest: null } },
+    "/api/devices/device001/nutrient-response-tests/latest": { ok: true, data: null },
+  };
+  for (const [path, body] of Object.entries(fixtures)) {
+    await page.route(`**${path}`, route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) }));
+  }
+
+  await page.goto("/zones/zone-nft-01/auto-dosing");
+  await expect(page.getByTestId("auto-dosing-monitor")).toHaveAttribute("data-monitor-state", "ready");
+  await expect(page.getByTestId("dosing-run-history")).toContainText("700.00 → 730.00 ppm");
+  await expect(page.getByTestId("dosing-event-history")).toContainText("run_completed");
+  await expect(page.getByRole("switch", { name: "Trạng thái Auto Dosing chỉ đọc" })).toBeDisabled();
+  await expect(page.getByRole("switch", { name: "Trạng thái Auto Dosing chỉ đọc" })).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator("input:not([disabled])")).toHaveCount(0);
+});
 test("six required viewports have no document overflow", async ({ page }) => {
   for (const viewport of [{width:360,height:800},{width:390,height:844},{width:768,height:1024},{width:1024,height:768},{width:1366,height:768},{width:1920,height:1080}]) {
     await page.setViewportSize(viewport);

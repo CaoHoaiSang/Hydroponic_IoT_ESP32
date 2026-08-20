@@ -1,4 +1,19 @@
-import type { CalibrationPointInput, DeviceSnapshot, GatewayHealth, SensorLogRow, StableMeasurement, SystemCapabilities } from "./types";
+import type {
+  AutoDosingEvent,
+  AutoDosingEventSummary,
+  AutoDosingMonitoringSnapshot,
+  AutoDosingReadiness,
+  AutoDosingRun,
+  AutoDosingSettings,
+  CalibrationPointInput,
+  DailyDoseUsage,
+  DeviceSnapshot,
+  GatewayHealth,
+  NutrientResponseTest,
+  SensorLogRow,
+  StableMeasurement,
+  SystemCapabilities,
+} from "./types";
 
 const lockedCapabilities: SystemCapabilities = {
   buildProfile: null, actuatorsLocked: true, pumpCommandsEnabled: false,
@@ -22,6 +37,55 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
   if (!response.ok || body.ok === false) throw new Error(body.errors?.join("; ") || body.message || `HTTP ${response.status}`);
   return body as T;
 }
+
+const recordOrEmpty = (value: unknown): Record<string, unknown> => (
+  value && typeof value === "object" ? value as Record<string, unknown> : {}
+);
+const numberOrNull = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+const stringOrNull = (value: unknown): string | null => (
+  typeof value === "string" && value ? value : null
+);
+const normalizePumpStep = (value: unknown) => {
+  const row = recordOrEmpty(value);
+  return {
+    commandId: stringOrNull(row.commandId),
+    durationMs: numberOrNull(row.durationMs),
+    status: String(row.status || "pending"),
+  };
+};
+const normalizeDosingRun = (value: unknown): AutoDosingRun => {
+  const row = recordOrEmpty(value);
+  return {
+    runId: String(row.runId || row._id || "unknown-run"),
+    status: String(row.status || "unknown"),
+    currentStep: String(row.currentStep || "unknown"),
+    tdsPpmAtStart: numberOrNull(row.tdsPpmAtStart),
+    tdsPpmAfterMixing: numberOrNull(row.tdsPpmAfterMixing),
+    deltaTdsPpm: numberOrNull(row.deltaTdsPpm),
+    stepDoseMlPerPump: numberOrNull(row.stepDoseMlPerPump ?? row.doseMlPerPump),
+    mixingDelayMs: numberOrNull(row.mixingDelayMs),
+    reason: stringOrNull(row.reason),
+    createdAt: stringOrNull(row.createdAt),
+    completedAt: stringOrNull(row.completedAt),
+    pumpA: normalizePumpStep(row.pumpA),
+    pumpB: normalizePumpStep(row.pumpB),
+  };
+};
+const normalizeAutoDosingEvent = (value: unknown): AutoDosingEvent => {
+  const row = recordOrEmpty(value);
+  return {
+    eventId: String(row.eventId || row._id || "unknown-event"),
+    eventType: String(row.eventType || "unknown"),
+    reason: stringOrNull(row.reason),
+    message: String(row.message || ""),
+    tdsPpm: numberOrNull(row.tdsPpm),
+    createdAt: stringOrNull(row.createdAt),
+  };
+};
 
 export class BackendApiAdapter {
   async getCapabilities(): Promise<SystemCapabilities> {
@@ -96,6 +160,85 @@ export class BackendApiAdapter {
         tdsControlValid: row.tdsControlValid === true,
       };
     });
+  }
+  async getAutoDosingMonitoring(deviceId: string): Promise<AutoDosingMonitoringSnapshot> {
+    const encodedDeviceId = encodeURIComponent(deviceId);
+    const [settingsResult, readinessResult, activeRunResult, runsResult, dailyUsageResult, eventsResult, eventSummaryResult, nutrientResult] = await Promise.all([
+      json<{ data?: unknown }>(`/api/devices/${encodedDeviceId}/auto-dosing/settings`),
+      json<{ data?: unknown }>(`/api/devices/${encodedDeviceId}/auto-dosing/readiness`),
+      json<{ data?: unknown }>(`/api/devices/${encodedDeviceId}/auto-dosing/active-run`),
+      json<{ data?: unknown[] }>(`/api/devices/${encodedDeviceId}/auto-dosing/runs?limit=10`),
+      json<Record<string, unknown>>(`/api/devices/${encodedDeviceId}/auto-dosing/daily-usage`),
+      json<{ data?: unknown[] }>(`/api/devices/${encodedDeviceId}/auto-dosing/events?limit=10`),
+      json<{ data?: unknown }>(`/api/devices/${encodedDeviceId}/auto-dosing/events/summary`),
+      json<{ data?: unknown }>(`/api/devices/${encodedDeviceId}/nutrient-response-tests/latest`),
+    ]);
+
+    const settingsRow = recordOrEmpty(settingsResult.data);
+    const readinessRow = recordOrEmpty(readinessResult.data);
+    const dailyRow = recordOrEmpty(dailyUsageResult);
+    const summaryRow = recordOrEmpty(eventSummaryResult.data);
+    const nutrientRow = nutrientResult.data ? recordOrEmpty(nutrientResult.data) : null;
+    const nutrientBefore = nutrientRow ? recordOrEmpty(nutrientRow.before) : {};
+    const nutrientAfter = nutrientRow ? recordOrEmpty(nutrientRow.after15min) : {};
+    const nutrientOutcome = nutrientRow ? recordOrEmpty(nutrientRow.result) : {};
+    const settings: AutoDosingSettings = {
+      deviceId: String(settingsRow.deviceId || deviceId),
+      mode: String(settingsRow.mode || "closed_loop_step"),
+      enabled: settingsRow.enabled === true,
+      phase22LockedOff: settingsRow.phase22LockedOff === true,
+      cropCode: String(settingsRow.cropCode || ""),
+      targetRangeConfirmed: settingsRow.targetRangeConfirmed === true,
+      targetMinPpm: numberOrNull(settingsRow.targetMinPpm),
+      targetMaxPpm: numberOrNull(settingsRow.targetMaxPpm),
+      stepDoseMlPerPump: numberOrNull(settingsRow.stepDoseMlPerPump ?? settingsRow.doseMlPerPump),
+      maxDoseMlPerPumpPerRun: numberOrNull(settingsRow.maxDoseMlPerPumpPerRun),
+      maxDailyDoseMlPerPump: numberOrNull(settingsRow.maxDailyDoseMlPerPump),
+      mixingDelayMs: numberOrNull(settingsRow.mixingDelayMs ?? settingsRow.cooldownMs),
+      requireMainPumpOn: settingsRow.requireMainPumpOn === true,
+      lastEvaluationAt: stringOrNull(settingsRow.lastEvaluationAt),
+      lastEvaluationReason: stringOrNull(settingsRow.lastEvaluationReason),
+      lastEvaluationTdsPpm: numberOrNull(settingsRow.lastEvaluationTdsPpm),
+    };
+    const latestSummaryEvent = summaryRow.latest ? normalizeAutoDosingEvent(summaryRow.latest) : null;
+    const eventSummary: AutoDosingEventSummary = {
+      windowHours: numberOrNull(summaryRow.windowHours) ?? 24,
+      total: numberOrNull(summaryRow.total) ?? 0,
+      latest: latestSummaryEvent,
+    };
+    const latestNutrientResponse: NutrientResponseTest | null = nutrientRow ? {
+      testId: String(nutrientRow.testId || nutrientRow._id || "unknown-test"),
+      beforeDashboardPpm: numberOrNull(nutrientBefore.dashboardAverage),
+      afterDashboardPpm: numberOrNull(nutrientAfter.dashboardAverage),
+      deltaDashboardPpm: numberOrNull(nutrientOutcome.deltaDashboard),
+      estimatedResponsePpmPerMl: numberOrNull(nutrientOutcome.estimatedResponsePpmPerMl),
+      createdAt: stringOrNull(nutrientRow.createdAt),
+    } : null;
+
+    return {
+      settings,
+      readiness: {
+        ready: readinessRow.ready === true,
+        reasons: Array.isArray(readinessRow.reasons)
+          ? readinessRow.reasons.filter((reason): reason is string => typeof reason === "string")
+          : [],
+      } satisfies AutoDosingReadiness,
+      activeRun: activeRunResult.data ? normalizeDosingRun(activeRunResult.data) : null,
+      runs: (runsResult.data || []).map(normalizeDosingRun),
+      dailyUsage: {
+        localDate: stringOrNull(dailyRow.localDate),
+        dailyDoseUsedMlPerPump: numberOrNull(dailyRow.dailyDoseUsedMlPerPump) ?? 0,
+        maxDailyDoseMlPerPump: numberOrNull(dailyRow.maxDailyDoseMlPerPump) ?? 0,
+        remainingDailyDoseMlPerPump: numberOrNull(dailyRow.remainingDailyDoseMlPerPump) ?? 0,
+        progressPercentage: numberOrNull(dailyRow.progressPercentage) ?? 0,
+        isLimitReached: dailyRow.isLimitReached === true,
+        runsCounted: numberOrNull(dailyRow.runsCounted) ?? 0,
+      } satisfies DailyDoseUsage,
+      events: (eventsResult.data || []).map(normalizeAutoDosingEvent),
+      eventSummary,
+      latestNutrientResponse,
+      loadedAt: new Date().toISOString(),
+    };
   }
   async setMainPump(deviceId: string, on: boolean) {
     return json(`/api/devices/${encodeURIComponent(deviceId)}/pumps/main/state`, {

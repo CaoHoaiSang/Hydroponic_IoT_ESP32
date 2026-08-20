@@ -33,7 +33,7 @@ static String escapeJsonString(const String& value) {
 
 String buildStatusPayload(const SensorData& data, const TelemetryIdentity& identity) {
   String payload;
-  payload.reserve(896);
+  payload.reserve(1152);
 
   payload += "{\n";
   payload += "  \"schemaVersion\": ";
@@ -103,6 +103,28 @@ String buildStatusPayload(const SensorData& data, const TelemetryIdentity& ident
   payload += "  \"tdsWindowStable\": ";
   payload += boolText(data.tdsWindowStable);
   payload += ",\n";
+
+  payload += "  \"ecProbePowerMode\": \"duty_cycle\",\n";
+
+  payload += "  \"ecProbePowered\": ";
+  payload += boolText(data.ecProbePowered);
+  payload += ",\n";
+
+  payload += "  \"ecProbeState\": \"";
+  payload += data.ecProbeState;
+  payload += "\",\n";
+
+  payload += "  \"ecProbeWarmupMs\": ";
+  payload += data.ecProbeWarmupMs;
+  payload += ",\n";
+
+  payload += "  \"ecProbePoweredAtUptimeMs\": ";
+  payload += data.ecProbePoweredAtUptimeMs;
+  payload += ",\n";
+
+  payload += "  \"ecProbeMeasurementTrigger\": \"";
+  payload += data.ecProbeMeasurementTrigger;
+  payload += "\",\n";
 
   payload += "  \"waterTemp\": ";
   if (data.waterTempValid) {
@@ -236,6 +258,10 @@ void printSensorStatus(const SensorData& data) {
   Serial.print(data.tdsSampleCount);
   Serial.print(" | spread: ");
   Serial.print(data.tdsSpreadRaw);
+  Serial.print(" | EC relay: ");
+  Serial.print(data.ecProbePowered ? "ON" : "OFF");
+  Serial.print(" | EC state: ");
+  Serial.print(data.ecProbeState);
   Serial.print(" | water temp: ");
   if (data.waterTempValid) {
     Serial.print(data.waterTemp, 2);

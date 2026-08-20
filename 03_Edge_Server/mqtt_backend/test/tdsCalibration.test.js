@@ -210,3 +210,35 @@ test('robust window rejects inconsistent retained sample count', () => {
 test('robust window fields must be supplied as one contract', () => {
   assert.equal(validateSensorPayload(validSensorPayload({ tdsRobustMin: 90 })).ok, false);
 });
+
+test('duty-cycle EC metadata accepts a completed powered measurement', () => {
+  const payload = validSensorPayload({
+    schemaVersion: 2,
+    bootId: 'bootduty01',
+    measurementSeq: 1,
+    measurementId: 'device001:bootduty01:1',
+    sampledAtUptimeMs: 31200,
+    uptimeMs: 31200,
+    ecProbePowerMode: 'duty_cycle',
+    ecProbePowered: true,
+    ecProbeState: 'READY',
+    ecProbeWarmupMs: 30000,
+    ecProbePoweredAtUptimeMs: 10,
+    ecProbeMeasurementTrigger: 'startup',
+  });
+  assert.equal(validateSensorPayload(payload).ok, true);
+});
+
+test('duty-cycle EC metadata fails closed when incomplete or unpowered', () => {
+  const base = {
+    ecProbePowerMode: 'duty_cycle',
+    ecProbePowered: true,
+    ecProbeState: 'READY',
+    ecProbeWarmupMs: 30000,
+    ecProbePoweredAtUptimeMs: 10,
+    ecProbeMeasurementTrigger: 'scheduled',
+  };
+  assert.equal(validateSensorPayload(validSensorPayload({ ...base, ecProbePowered: false })).ok, false);
+  assert.equal(validateSensorPayload(validSensorPayload({ ...base, ecProbeState: 'WARMING_UP' })).ok, false);
+  assert.equal(validateSensorPayload(validSensorPayload({ ...base, ecProbeWarmupMs: undefined })).ok, false);
+});

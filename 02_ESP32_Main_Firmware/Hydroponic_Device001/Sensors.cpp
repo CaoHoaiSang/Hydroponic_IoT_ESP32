@@ -18,6 +18,70 @@ static unsigned long previousDs18b20CycleMs = 0;
 static bool ds18b20ConversionPending = false;
 static SensorData latestData;
 
+enum EcProbeState {
+  EC_PROBE_POWERED_OFF,
+  EC_PROBE_WARMING_UP,
+  EC_PROBE_SAMPLING,
+  EC_PROBE_READY,
+  EC_PROBE_FAULT_LOCKOUT
+};
+
+static EcProbeState ecProbeState = EC_PROBE_POWERED_OFF;
+static unsigned long ecProbePoweredAtMs = 0;
+static unsigned long ecProbeLastPoweredOffMs = 0;
+static bool ecProbeHasPoweredOnce = false;
+static bool ecProbeReady = false;
+static const char* ecProbeTrigger = "none";
+
+static const char* ecProbeStateText(EcProbeState state) {
+  if (state == EC_PROBE_WARMING_UP) return "WARMING_UP";
+  if (state == EC_PROBE_SAMPLING) return "SAMPLING";
+  if (state == EC_PROBE_READY) return "READY";
+  if (state == EC_PROBE_FAULT_LOCKOUT) return "FAULT_LOCKOUT";
+  return "POWERED_OFF";
+}
+
+static void writeEcProbePower(bool on) {
+  digitalWrite(
+    PIN_EC_POWER_RELAY,
+    on == EC_POWER_RELAY_ACTIVE_HIGH ? HIGH : LOW
+  );
+  latestData.ecProbePowered = on;
+}
+
+static void resetTdsWindow() {
+  tdsSampleIndex = 0;
+  tdsSamplesCollected = 0;
+  previousTdsSampleMs = 0;
+  latestData.tdsRaw = 0;
+  latestData.tdsVoltage = 0;
+  latestData.tdsMin = 0;
+  latestData.tdsMax = 0;
+  latestData.tdsSampleCount = 0;
+  latestData.tdsSpreadRaw = 0;
+  latestData.tdsRobustMin = 0;
+  latestData.tdsRobustMax = 0;
+  latestData.tdsRobustSpreadRaw = 0;
+  latestData.tdsTrimmedSampleCount = 0;
+  latestData.tdsWindowStable = false;
+  latestData.ecProbeMeasurementAtUptimeMs = 0;
+}
+
+static void setEcProbeState(EcProbeState state) {
+  ecProbeState = state;
+  latestData.ecProbeState = ecProbeStateText(state);
+}
+
+static void lockOutEcProbe(unsigned long currentMs, const char* reason) {
+  writeEcProbePower(false);
+  ecProbeReady = false;
+  ecProbeLastPoweredOffMs = currentMs;
+  setEcProbeState(EC_PROBE_FAULT_LOCKOUT);
+  latestData.tdsWindowStable = false;
+  Serial.print("EC probe FAULT_LOCKOUT: ");
+  Serial.println(reason);
+}
+
 static bool isValidWaterTemperature(float value) {
   return value != DEVICE_DISCONNECTED_C
     && value != 85.0
@@ -97,6 +161,20 @@ static void updateTdsSampling(unsigned long currentMs) {
   tdsSampleIndex = (tdsSampleIndex + 1) % TDS_SAMPLE_COUNT;
   if (tdsSamplesCollected < TDS_SAMPLE_COUNT) tdsSamplesCollected++;
   updateTdsSummary();
+
+  if (tdsSamplesCollected == TDS_SAMPLE_COUNT) {
+    latestData.ecProbeMeasurementAtUptimeMs = currentMs;
+    ecProbeReady = true;
+    setEcProbeState(EC_PROBE_READY);
+    Serial.print("EC probe window ready | median: ");
+    Serial.print(latestData.tdsRaw);
+    Serial.print(" | spread: ");
+    Serial.print(latestData.tdsSpreadRaw);
+    Serial.print(" | robust spread: ");
+    Serial.print(latestData.tdsRobustSpreadRaw);
+    Serial.print(" | stable: ");
+    Serial.println(latestData.tdsWindowStable ? "true" : "false");
+  }
 }
 
 static void requestWaterTemperature(unsigned long currentMs) {
@@ -121,22 +199,20 @@ static void updateWaterTemperature(unsigned long currentMs) {
 }
 
 void sensorsBegin() {
+  pinMode(PIN_EC_POWER_RELAY, OUTPUT);
+  writeEcProbePower(false);
   pinMode(PIN_TDS_ADC, INPUT);
   pinMode(PIN_WATER_LEVEL, INPUT_PULLUP);
   analogReadResolution(12);
   analogSetPinAttenuation(PIN_TDS_ADC, ADC_11db);
 
-  latestData.tdsRaw = 0;
-  latestData.tdsVoltage = 0;
-  latestData.tdsMin = 0;
-  latestData.tdsMax = 0;
-  latestData.tdsSampleCount = 0;
-  latestData.tdsSpreadRaw = 0;
-  latestData.tdsRobustMin = 0;
-  latestData.tdsRobustMax = 0;
-  latestData.tdsRobustSpreadRaw = 0;
-  latestData.tdsTrimmedSampleCount = 0;
-  latestData.tdsWindowStable = false;
+  resetTdsWindow();
+  latestData.ecProbePowered = false;
+  latestData.ecProbeState = "POWERED_OFF";
+  latestData.ecProbeMeasurementTrigger = "none";
+  latestData.ecProbeWarmupMs = EC_PROBE_WARMUP_MS;
+  latestData.ecProbePoweredAtUptimeMs = 0;
+  latestData.ecProbeMeasurementAtUptimeMs = 0;
   latestData.waterTemp = 0;
   latestData.waterTempValid = false;
   latestData.waterLevel = "error";
@@ -149,11 +225,87 @@ void sensorsBegin() {
 }
 
 void sensorsUpdate(unsigned long currentMs) {
-  updateTdsSampling(currentMs);
+  if ((ecProbeState == EC_PROBE_WARMING_UP
+      || ecProbeState == EC_PROBE_SAMPLING
+      || ecProbeState == EC_PROBE_READY)
+    && currentMs - ecProbePoweredAtMs >= EC_PROBE_MAX_ON_MS) {
+    lockOutEcProbe(currentMs, "maximum continuous ON time exceeded");
+  }
+
+  if (ecProbeState == EC_PROBE_WARMING_UP
+    && currentMs - ecProbePoweredAtMs >= EC_PROBE_WARMUP_MS) {
+    resetTdsWindow();
+    setEcProbeState(EC_PROBE_SAMPLING);
+    Serial.println("EC probe warm-up complete; collecting a fresh 30-sample window");
+  }
+
+  if (ecProbeState == EC_PROBE_SAMPLING) {
+    updateTdsSampling(currentMs);
+  }
   updateWaterTemperature(currentMs);
   updateWaterLevel();
 }
 
 SensorData readSensors() {
   return latestData;
+}
+
+unsigned long ecProbeOffTimeRemainingMs(unsigned long currentMs) {
+  if (!ecProbeHasPoweredOnce) return 0;
+  unsigned long elapsed = currentMs - ecProbeLastPoweredOffMs;
+  return elapsed >= EC_PROBE_MIN_OFF_MS ? 0 : EC_PROBE_MIN_OFF_MS - elapsed;
+}
+
+bool requestEcProbeMeasurement(unsigned long currentMs, const char* trigger) {
+  if (ecProbeState == EC_PROBE_FAULT_LOCKOUT) {
+    Serial.println("EC measurement rejected: probe is in FAULT_LOCKOUT; reset required");
+    return false;
+  }
+  if (ecProbeState != EC_PROBE_POWERED_OFF || ecProbeReady) {
+    Serial.println("EC measurement rejected: another probe cycle is active");
+    return false;
+  }
+  unsigned long offRemainingMs = ecProbeOffTimeRemainingMs(currentMs);
+  if (offRemainingMs > 0) {
+    Serial.print("EC measurement rejected: minimum OFF time remaining ");
+    Serial.print(offRemainingMs);
+    Serial.println(" ms");
+    return false;
+  }
+
+  ecProbeTrigger = trigger;
+  ecProbeReady = false;
+  resetTdsWindow();
+  ecProbePoweredAtMs = currentMs;
+  ecProbeHasPoweredOnce = true;
+  latestData.ecProbeMeasurementTrigger = ecProbeTrigger;
+  latestData.ecProbePoweredAtUptimeMs = currentMs;
+  writeEcProbePower(true);
+  setEcProbeState(EC_PROBE_WARMING_UP);
+  Serial.print("EC probe power ON | trigger: ");
+  Serial.print(ecProbeTrigger);
+  Serial.print(" | warm-up: ");
+  Serial.print(EC_PROBE_WARMUP_MS);
+  Serial.println(" ms");
+  return true;
+}
+
+bool ecProbeMeasurementReady() {
+  return ecProbeReady && ecProbeState == EC_PROBE_READY;
+}
+
+bool ecProbeScheduledMeasurementDue(unsigned long currentMs) {
+  return ecProbeState == EC_PROBE_POWERED_OFF
+    && !ecProbeReady
+    && ecProbeHasPoweredOnce
+    && currentMs - ecProbeLastPoweredOffMs >= EC_PROBE_MEASUREMENT_INTERVAL_MS;
+}
+
+void finishEcProbeMeasurement(unsigned long currentMs) {
+  if (ecProbeState != EC_PROBE_READY) return;
+  writeEcProbePower(false);
+  ecProbeReady = false;
+  ecProbeLastPoweredOffMs = currentMs;
+  setEcProbeState(EC_PROBE_POWERED_OFF);
+  Serial.println("EC probe power OFF after bounded measurement publish attempt");
 }

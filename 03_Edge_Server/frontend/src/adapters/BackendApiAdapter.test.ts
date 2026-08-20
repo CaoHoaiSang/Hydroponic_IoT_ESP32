@@ -97,3 +97,34 @@ describe("BackendApiAdapter sensor logs", () => {
     expect(pointBody.referenceScale).toBe("500");
   });
 });
+
+describe("BackendApiAdapter Auto Dosing monitoring", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("loads and normalizes the read-only monitoring endpoints", async () => {
+    const responses: Record<string, unknown> = {
+      "/api/devices/device001/auto-dosing/settings": { ok: true, data: { deviceId: "device001", enabled: false, phase22LockedOff: true, cropCode: "cai_ngot", targetRangeConfirmed: true, targetMinPpm: 800, targetMaxPpm: 900, stepDoseMlPerPump: 1, maxDoseMlPerPumpPerRun: 1, maxDailyDoseMlPerPump: 2, mixingDelayMs: 900000, requireMainPumpOn: true, lastEvaluationReason: "disabled" } },
+      "/api/devices/device001/auto-dosing/readiness": { ok: true, data: { ready: false, reasons: ["tds_control_invalid", "main_pump_not_running"] } },
+      "/api/devices/device001/auto-dosing/active-run": { ok: true, data: null },
+      "/api/devices/device001/auto-dosing/runs?limit=10": { ok: true, data: [{ runId: "dose-1", status: "completed", currentStep: "completed", tdsPpmAtStart: 700, tdsPpmAfterMixing: 730, deltaTdsPpm: 30, stepDoseMlPerPump: 1, pumpA: { durationMs: 500, status: "completed" }, pumpB: { durationMs: 556, status: "completed" }, createdAt: "2026-08-15T01:00:00.000Z" }] },
+      "/api/devices/device001/auto-dosing/daily-usage": { ok: true, localDate: "2026-08-15", dailyDoseUsedMlPerPump: 1, maxDailyDoseMlPerPump: 2, remainingDailyDoseMlPerPump: 1, progressPercentage: 50, isLimitReached: false, runsCounted: 1 },
+      "/api/devices/device001/auto-dosing/events?limit=10": { ok: true, data: [{ eventId: "event-1", eventType: "run_completed", reason: "completed", tdsPpm: 730, createdAt: "2026-08-15T01:15:00.000Z" }] },
+      "/api/devices/device001/auto-dosing/events/summary": { ok: true, data: { windowHours: 24, total: 1, latest: { eventId: "event-1", eventType: "run_completed", reason: "completed" } } },
+      "/api/devices/device001/nutrient-response-tests/latest": { ok: true, data: { testId: "response-1", before: { dashboardAverage: 700 }, after15min: { dashboardAverage: 730 }, result: { deltaDashboard: 30, estimatedResponsePpmPerMl: 30 }, createdAt: "2026-08-15T01:15:00.000Z" } },
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async input => {
+      const url = String(input);
+      return new Response(JSON.stringify(responses[url]), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+
+    const result = await new BackendApiAdapter().getAutoDosingMonitoring("device001");
+
+    expect(result.settings).toMatchObject({ enabled: false, cropCode: "cai_ngot", targetMinPpm: 800, targetMaxPpm: 900 });
+    expect(result.readiness).toEqual({ ready: false, reasons: ["tds_control_invalid", "main_pump_not_running"] });
+    expect(result.runs[0]).toMatchObject({ runId: "dose-1", deltaTdsPpm: 30, pumpA: { durationMs: 500, status: "completed" } });
+    expect(result.dailyUsage).toMatchObject({ progressPercentage: 50, runsCounted: 1 });
+    expect(result.latestNutrientResponse).toMatchObject({ beforeDashboardPpm: 700, afterDashboardPpm: 730, deltaDashboardPpm: 30 });
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+    expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
+  });
+});

@@ -13,6 +13,7 @@
 | Sensor | Sensor Pin | ESP32 Pin | Notes |
 |---|---|---|---|
 | DFRobot Gravity Analog TDS Sensor SEN0244 | AOUT | GPIO34 | Analog input only; module output specification is 0-2.3V |
+| SEN0244 5V power relay | IN | GPIO32 | Active HIGH; external 10k ohm pull-down to GND keeps relay OFF during boot |
 | DS18B20 waterproof temperature sensor | DATA | GPIO4 | Requires 4.7k ohm pull-up resistor to 3.3V |
 | Water level float switch | Signal wire | GPIO27 | Other wire goes to Common GND |
 
@@ -20,13 +21,32 @@
 
 | Sensor | Sensor Pin | ESP32 Connection | Notes |
 |---|---|---|---|
-| TDS SEN0244 | VCC / `+` | ESP32 `5V` | Official module input range is 3.3-5.5V; this project's verified configuration uses 5V |
+| TDS SEN0244 | VCC / `+` | Relay `NO` | Relay `COM` receives ESP32 5V; measured sensor VCC is 4.57V ON and 53.9mV OFF |
 | TDS SEN0244 | GND / `-` | ESP32 GND / common GND | Required reference for AOUT |
 | TDS SEN0244 | AOUT / `A` | GPIO34 | Signal output is 0-2.3V, not the 5V supply rail |
 | DS18B20 | VCC | ESP32 `3V3` | DATA remains pulled up to 3.3V |
 | DS18B20 | GND | ESP32 GND / common GND | Common ground |
 
 SEN0244 reference: <https://wiki.dfrobot.com/sen0244/>.
+
+## SEN0244 Power Relay Wiring
+
+The verified prototype uses a BLK Mini 1-channel 5V relay with an
+`SRD-05VDC-SL-C` relay and the trigger jumper in the HIGH position.
+
+| Relay connection | Destination |
+|---|---|
+| `VCC` | ESP32 5V |
+| `GND` | ESP32 GND |
+| `IN` | GPIO32 |
+| 10k ohm resistor | Between `IN` and relay GND |
+| `COM` | ESP32 5V |
+| `NO` | SEN0244 VCC |
+| `NC` | Not connected |
+
+GPIO32 LOW means sensor power OFF. GPIO32 HIGH means sensor power ON. The T09 physical test
+passed bounded 2-second and 10-second switching, default OFF, LED operation, and contact voltage.
+SEN0244 AOUT remains connected directly to GPIO34 and SEN0244 GND remains on common GND.
 
 ## MOSFET Module Type
 
@@ -111,6 +131,9 @@ Do not place the speed controller before the MOSFET module power input. The spee
 - Never connect 5V signal directly to ESP32 GPIO.
 - SEN0244 `VCC -> 5V` is a power connection, not a GPIO signal connection. Only SEN0244
   `AOUT` may connect to GPIO34, and the official AOUT range is 0-2.3V.
+- GPIO32 controls only the relay input. Never connect SEN0244 VCC or relay 5V directly to GPIO32.
+- The relay must use `COM -> 5V`, `NO -> SEN0244 VCC`, and HIGH-trigger mode so the external
+  10k ohm pull-down keeps sensor power OFF during boot/reset.
 - Deposits and trapped air bubbles on the TDS probe can cause a large reading drift. Rinse and
   inspect the probe, remove bubbles, and wait for stable readings before calibration or dosing.
 - Do not recalibrate while the probe is fouled, bubbly, outside the calibration range, or

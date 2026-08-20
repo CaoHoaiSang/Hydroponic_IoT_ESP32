@@ -2,13 +2,13 @@
 
 ## 1. Last Updated
 
-- Date: 2026-08-15
+- Date: 2026-08-16
 - Updated by: Codex
 
 ## 2. Current Project Phase
 
-- Current phase: Phase 23B - Stage 1 Network Transition Complete
-- Short description: Nonblocking Wi-Fi recovery, authenticated hotspot MQTT, actuator-locked COM5 upload, Telemetry Identity V2 boot transition, three distinct accepted measurements, fresh Dashboard data, and zero-actuator evidence passed. Auto Dosing remains OFF.
+- Current phase: Phase 23D - EC Probe Duty-Cycle Protection
+- Short description: GPIO32 controls the validated 5V relay, SEN0244 uses a measured 30-second warm-up and fresh 30-sample window, and the actuator-locked Stage 1 firmware powers the probe OFF after each publish attempt. Auto Dosing remains OFF.
 
 ## 3. Completed Tasks
 
@@ -62,6 +62,9 @@
 | 46 | Phase 22B closure and source baseline | Done | Current docs reconciled. Backend 213/213, frontend unit 5/5, Playwright 24/24, JavaScript syntax 56/56, diff check, secret/path checks, and a fresh USB_STAGE1 firmware compile passed. Git checkpoint recorded in `CODEX_PHASE22B_FINAL_REPORT.md`. |
 | 47 | Phase 23A Demo and Operational Readiness | Done | Backend 218/218, frontend unit 6/6, Playwright 26/26, PowerShell 3/3, real isolated Stage 0 backup/restore/readiness PASS. Restored evidence: 9 sensor logs, 7 Shadow decisions, zero pump logs/runs, Auto Dosing enabled count zero. |
 | 48 | Phase 23B Stage 1 network transition | Done | Distant-AP WPA timeout was diagnosed without weakening safety. Nonblocking retry hardening, auth/ACL/topic parity, backend 219/219, clean compile, COM5 upload, nearby-hotspot Wi-Fi/MQTT, boot transition, three accepted measurements, fresh Dashboard, and zero actuator side effects passed. |
+| 49 | Phase 23C React Auto Dosing monitoring | Implemented | GET-only adapter and five-second read-only display for settings, readiness, daily usage, active/latest runs, events, and nutrient response. Runtime browser verification is recorded in the Phase 23C report. |
+| 50 | T09/T10 EC relay and settling validation | Done | GPIO32 relay, 10k pull-down, 4.57 V ON / 53.9 mV OFF, AOUT 0 V while OFF, bounded relay windows, and three T10 cycles passed. |
+| 51 | Phase 23D EC probe duty-cycle firmware | Implemented and physically exercised | 30 s warm-up, fresh 30-sample window, 35 s watchdog, 60 s minimum OFF, 15 min schedule, retry identity, backend metadata, and no-immediate-retrigger fix. Full 15-minute schedule and forced watchdog timeout remain unverified. |
 
 ## 4. Created Folders
 
@@ -384,7 +387,8 @@ Source Consolidation added or updated:
 - Auto Dosing Phase 21 default: OFF. Existing numeric targets are unconfirmed and cannot enable dosing until explicitly confirmed for cải ngọt.
 - Dashboard Auto Dosing form edit guard: preserved.
 - Phase 20B runtime: passed, including real nutrient one-step from 302.27 ppm to 348.88 ppm, delta +46.61 ppm after a 1 ml A + 1 ml B step and 15-minute mixing delay.
-- Auto Dosing monitoring: safety state, target/current TDS, pump and water status, calibration readiness, active run, latest completed V2 run, and daily usage are displayed.
+- Auto Dosing monitoring: the legacy dashboard and React dashboard display backend safety state, settings, active/latest run, daily usage, event history, and nutrient response. The React path is GET-only and refreshes every five seconds.
+- EC probe duty-cycle protection: active in uploaded `USB_STAGE1` firmware through the validated GPIO32 relay. The active calibration is not yet revalidated for the duty-cycle protocol.
 - Auto Dosing events: stored in `auto_dosing_events`; settings and run transitions are logged, while repeated skip reasons are deduplicated for 5 minutes by default.
 - Daily usage: calculated from local day start or the latest same-day `manual_daily_reset` event.
 - Daily reset: prototype-only, requires exact `RESET DAILY DOSE`, does not delete `dosing_runs`, and does not modify `pump_logs`.
@@ -566,6 +570,7 @@ Example verified safety event:
 - Auto Dosing does not auto-start the main pump in this phase.
 - Handheld TDS meters still differ in absolute readings.
 - The TDS sensor can be affected by bubbles, probe cleanliness, and mixing state.
+- SEN0244 duty cycling uses the reviewed prototype relay on official GPIO32. A solid-state high-side switch remains preferable for a production revision.
 - Auto Dosing has only been validated for conservative small-step dosing under supervision, not fully autonomous long-term cultivation.
 - pH remains `null`.
 - No authentication yet.
@@ -583,7 +588,34 @@ Example verified safety event:
 
 ## 12. Next Recommended Direction
 
-"Use the Phase 23A demo checklist with the verified nearby-hotspot Stage 1 runtime. Select the next feature phase through an explicit requirements review; do not repeat passed firmware uploads, telemetry checks, or pump tests by default, and do not enable Auto Dosing."
+"Observe one complete 15-minute scheduled EC cycle with the probe untouched, then create and validate a new three-point EC-first calibration set using the same 30-second duty-cycle protocol. Keep Auto Dosing OFF and all pump power disconnected."
+
+### Phase 23C Handoff
+
+#### Created Files
+
+- `00_Docs/EC_PROBE_DUTY_CYCLE_PLAN.md`: hardware-gated, fail-closed probe protection design.
+- `CODEX_PHASE23C_FINAL_REPORT.md`: implementation, verification, safety, and remaining-gate report.
+
+#### Modified Files
+
+- `03_Edge_Server/frontend/src/adapters/types.ts`: Auto Dosing monitoring contracts.
+- `03_Edge_Server/frontend/src/adapters/index.ts`: export the new contracts.
+- `03_Edge_Server/frontend/src/adapters/BackendApiAdapter.ts`: aggregate eight read-only Backend endpoints.
+- `03_Edge_Server/frontend/src/App.tsx`: replace placeholder Auto Dosing values with runtime monitoring.
+- `03_Edge_Server/frontend/src/styles.css`: responsive run/event monitoring lists.
+- `03_Edge_Server/frontend/src/adapters/BackendApiAdapter.test.ts`: GET-only contract coverage.
+- `03_Edge_Server/frontend/tests/playwright/frontend-acceptance.spec.ts`: locked read-only runtime rendering coverage.
+- `README.md`, `README_HYDROFLOW_LOCAL.md`, and `00_Docs/PROJECT_PLAN.md`: Phase 23C scope and probe protection gate.
+- `00_Docs/PROJECT_STATUS_REPORT.md`: current source-of-record status.
+
+#### Safety Confirmation
+
+- No ESP32 firmware file was modified or uploaded.
+- No MQTT publisher, pump route, Auto Dosing settings-write route, or enable control was added.
+- No calibration lifecycle action was performed.
+- No official pin-map change was made.
+- Auto Dosing remains OFF and the Stage 1 actuator lock remains authoritative.
 
 ### Future Phase 20D DOCX Updates
 
@@ -830,3 +862,40 @@ hardware operation occurred.
 Run the integrated UI against the isolated Phase 22B staging environment, keep pump power
 removed and Auto Dosing OFF, then verify real `device001` sensor logs and calibration-set pages
 without changing calibration lifecycle state or issuing actuator commands.
+
+## 19. Phase 23D Handoff
+
+### Created Files And Folders
+
+- `01_ESP32_Test_Sketches/T09_EC_Power_Relay_Test/T09_EC_Power_Relay_Test.ino`: bounded relay electrical test.
+- `01_ESP32_Test_Sketches/T10_EC_Power_Settling_Test/T10_EC_Power_Settling_Test.ino`: repeated 30-second ADC settling test.
+- `02_ESP32_Main_Firmware/Hydroponic_Device001/EcProbeSchedule.h`: pure schedule guard used by firmware and native host regression.
+- `CODEX_PHASE23D_FINAL_REPORT.md`: complete Phase 23D implementation and verification handoff.
+
+### Modified Files
+
+- Firmware `Config.h`, `Sensors.h`, `Sensors.cpp`, `PayloadBuilder.cpp`, and `Hydroponic_Device001.ino`: GPIO32 duty-cycle state machine, bounded timing, metadata, retry-safe publication, and manual maintenance trigger.
+- Backend `sensorPayloadValidator.js` and `sensorLogService.js`: optional legacy-compatible duty-cycle validation and persistence.
+- Backend `tdsCalibration.test.js`, `phase22TelemetryIdentity.test.js`, and native firmware fixture: fail-closed metadata, GPIO, packet-budget, and no-same-loop-retrigger coverage.
+- `Pin_Map.md`, `Wiring_Checklist.md`, `EC_PROBE_DUTY_CYCLE_PLAN.md`, `Payload_Format.md`, `Database_Schema.md`, `PROJECT_PLAN.md`, `PROJECT_STATUS_REPORT.md`, and `README.md`: wiring, contract, status, and limitations.
+
+### Verification And Runtime
+
+- T09: default OFF, two-second bounded pulse, relay click/LED, contact voltage, sensor VCC, and AOUT back-power checks passed.
+- T10: three supervised cycles passed. The conservative warm-up is 30 seconds; the last two repeat cycles stayed near raw ADC 2777-2783.
+- Main firmware `USB_STAGE1` clean compile: PASS, flash 942400 bytes (71%), static RAM 47296 bytes (14%).
+- Backend/native host regression: 221 passed, 0 failed, 0 skipped.
+- COM5 upload and hash verification: PASS.
+- Runtime startup window, stable ADC summary, publish attempt, physical relay OFF, and 70-second no-retrigger observation: PASS.
+- A first integration build exposed an immediate schedule retrigger caused by same-loop unsigned subtraction. The source was fixed, recompiled, reflashed, and the 70-second runtime check plus host regression passed.
+- Isolated Stage 1 evidence after testing: Auto Dosing false, Pump Main/A/B false, pump logs 0, dosing runs 0.
+- Full 15-minute schedule interval and forced 35-second watchdog timeout: not yet physically verified.
+- Latest duty-cycle measurement remained fail-closed for dosing because calibration/stability readiness was not satisfied. No calibration lifecycle action occurred.
+
+### Safety State
+
+- Auto Dosing remains OFF.
+- `USB_STAGE1` disables MQTT pump subscription and Serial actuator commands and forces Pump Main/A/B OFF.
+- The 12V pump supply remained disconnected throughout Phase 23D.
+- No pump command, pump operation, dosing run, or calibration activation occurred.
+- Runtime Wi-Fi/MQTT secrets remain in Git-ignored files and are not recorded in tracked reports.

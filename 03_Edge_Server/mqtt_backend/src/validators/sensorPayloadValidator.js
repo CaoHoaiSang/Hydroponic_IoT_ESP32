@@ -26,6 +26,15 @@ const ROBUST_WINDOW_FIELDS = [
   'tdsTrimmedSampleCount',
 ];
 
+const EC_PROBE_DUTY_CYCLE_FIELDS = [
+  'ecProbePowerMode',
+  'ecProbePowered',
+  'ecProbeState',
+  'ecProbeWarmupMs',
+  'ecProbePoweredAtUptimeMs',
+  'ecProbeMeasurementTrigger',
+];
+
 function validateSensorPayload(payload) {
   const errors = [];
   if (!isObject(payload)) return { ok: false, errors: ['payload must be an object'] };
@@ -108,6 +117,26 @@ function validateSensorPayload(payload) {
       errors.push(hasRobustWindow
         ? `tdsWindowStable must require ${TDS_WINDOW_SAMPLE_COUNT} samples, ${TDS_WINDOW_TRIMMED_SAMPLE_COUNT} retained samples, robust spread <= ${TDS_WINDOW_MAX_ROBUST_SPREAD_RAW}, and full spread <= ${TDS_WINDOW_MAX_ABSOLUTE_SPREAD_RAW}`
         : `tdsWindowStable must equal (tdsSampleCount === ${TDS_WINDOW_SAMPLE_COUNT} && tdsSpreadRaw <= ${TDS_WINDOW_MAX_SPREAD_RAW})`);
+    }
+  }
+  const ecProbeFieldsPresent = EC_PROBE_DUTY_CYCLE_FIELDS.filter((field) => (
+    Object.prototype.hasOwnProperty.call(payload, field)
+  ));
+  const hasEcProbeDutyCycle = ecProbeFieldsPresent.length === EC_PROBE_DUTY_CYCLE_FIELDS.length;
+  if (ecProbeFieldsPresent.length > 0 && !hasEcProbeDutyCycle) {
+    errors.push('EC probe duty-cycle fields must be provided together');
+  }
+  if (hasEcProbeDutyCycle) {
+    if (payload.ecProbePowerMode !== 'duty_cycle') errors.push('ecProbePowerMode must equal duty_cycle');
+    if (payload.ecProbePowered !== true) errors.push('ecProbePowered must be true for a published completed measurement');
+    if (payload.ecProbeState !== 'READY') errors.push('ecProbeState must equal READY for a published completed measurement');
+    if (!Number.isSafeInteger(payload.ecProbeWarmupMs) || payload.ecProbeWarmupMs <= 0 || payload.ecProbeWarmupMs > 120000) errors.push('ecProbeWarmupMs must be an integer from 1 to 120000');
+    if (!Number.isSafeInteger(payload.ecProbePoweredAtUptimeMs) || payload.ecProbePoweredAtUptimeMs < 0) errors.push('ecProbePoweredAtUptimeMs must be a non-negative safe integer');
+    if (!['startup', 'scheduled', 'manual', 'post_mixing', 'calibration'].includes(payload.ecProbeMeasurementTrigger)) errors.push('ecProbeMeasurementTrigger is invalid');
+    if (Number.isSafeInteger(payload.ecProbePoweredAtUptimeMs)
+      && Number.isSafeInteger(payload.sampledAtUptimeMs)
+      && payload.ecProbePoweredAtUptimeMs >= payload.sampledAtUptimeMs) {
+      errors.push('ecProbePoweredAtUptimeMs must be before sampledAtUptimeMs');
     }
   }
   if (!(isNumber(payload.waterTemp) || payload.waterTemp === null)) errors.push('waterTemp must be a number or null');

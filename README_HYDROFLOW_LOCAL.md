@@ -1,5 +1,15 @@
 # HydroFlow Local Integration
 
+## Phase 23C Auto Dosing Monitoring
+
+The React Auto Dosing view reads Backend settings, readiness, daily usage, active/latest runs,
+event history, and nutrient-response data. It refreshes every five seconds and keeps the last
+successful snapshot visible if a refresh fails. All controls are disabled and the adapter uses
+GET endpoints only; it cannot enable Auto Dosing or send a pump command.
+
+EC probe duty-cycle power control is not active hardware. See
+`00_Docs/EC_PROBE_DUTY_CYCLE_PLAN.md` before adding a 5V high-side switch or selecting a new GPIO.
+
 Gói này được tạo từ `feature/integrate-ui` tại commit `30d0b34c4bb00720dd5154beac96bbc2ed7389a2` và tích hợp giao diện HydroFlow từ source commit `4bb74fe7cde485827bd7dc7bcf3df33e0841e7dd`.
 
 ## Chạy nhanh trên Windows

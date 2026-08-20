@@ -54,7 +54,15 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { backendApiAdapter, CapabilityAdapter, HealthAdapter, isSnapshotFresh, type DeviceSnapshot, type SensorLogRow } from "./adapters";
+import {
+  backendApiAdapter,
+  CapabilityAdapter,
+  HealthAdapter,
+  isSnapshotFresh,
+  type AutoDosingMonitoringSnapshot,
+  type DeviceSnapshot,
+  type SensorLogRow,
+} from "./adapters";
 import { CalibrationWizard } from "./components/CalibrationWizard";
 
 type View = "overview" | "zones" | "garden" | "monitoring" | "pumps" | "dosing" | "assistant" | "calibration" | "data" | "settings" | "system";
@@ -498,20 +506,105 @@ function PumpsView({ deviceId, mainPump, notify, onNavigate, capabilities, runti
   </div>;
 }
 
+const autoDosingReasonLabels: Record<string, string> = {
+  crop_profile_invalid: "Hồ sơ cây trồng không hợp lệ",
+  tds_target_range_unconfirmed: "Dải TDS chưa được xác nhận",
+  tds_calibration_set_missing: "Chưa có bộ hiệu chuẩn TDS active",
+  tds_calibration_set_inactive: "Bộ hiệu chuẩn TDS chưa active",
+  tds_calibration_insufficient_points: "Bộ hiệu chuẩn chưa đủ điểm",
+  tds_calibration_set_mismatch: "Measurement không cùng bộ hiệu chuẩn active",
+  tds_control_invalid: "Giá trị TDS chưa đủ điều kiện điều khiển",
+  tds_unstable: "TDS chưa ổn định",
+  tds_outside_calibration_range: "TDS nằm ngoài dải hiệu chuẩn",
+  tds_calibration_warning: "Hiệu chuẩn TDS đang có cảnh báo",
+  tds_temperature_not_compensated: "TDS chưa bù nhiệt độ",
+  water_level_low: "Mực nước không bình thường",
+  water_temp_invalid: "Nhiệt độ nước không hợp lệ",
+  main_pump_not_running: "Bơm hồi lưu chưa chạy",
+  tds_measurement_stale: "Measurement TDS đã cũ",
+  pump_calibration_missing: "Thiếu hiệu chuẩn bơm A/B",
+  tds_target_outside_calibrated_range: "Dải mục tiêu nằm ngoài dải hiệu chuẩn",
+  mixing_wait_active: "Đang chờ trộn sau dosing",
+  dosing_run_active: "Đang có dosing run hoạt động",
+  daily_dose_limit_reached: "Đã chạm giới hạn liều trong ngày",
+  disabled: "Auto Dosing đang tắt",
+};
+
+const formatDosingNumber = (value: number | null, digits = 1) => value === null ? "—" : value.toFixed(digits);
+const formatDosingTime = (value: string | null) => value ? new Date(value).toLocaleString("vi-VN") : "—";
+const getDosingReasonLabel = (reason: string | null) => reason ? autoDosingReasonLabels[reason] || reason : "Chưa có đánh giá";
+
 function DosingView({ mainPump, crop, zone, capabilities }: { mainPump:boolean; crop:CropProfile; zone:GrowingZone; capabilities:SystemCapabilities }) {
-  const [target,setTarget]=useState(Math.round((zone.targetTdsMin+zone.targetTdsMax)/2)); const [stepDose,setStepDose]=useState(1); const [maxDose,setMaxDose]=useState(1); const [dailyLimit,setDailyLimit]=useState(2); const [mixMinutes,setMixMinutes]=useState(15); const [requireRecirculation,setRequireRecirculation]=useState(true);
-  const targetInZone=target>=zone.targetTdsMin&&target<=zone.targetTdsMax;
-  const actuatorAvailable=!capabilities.actuatorsLocked&&capabilities.pumpCommandsEnabled;
-  const checks = [["TDS hợp lệ & ổn định","Readiness API chưa tích hợp",false],["Setpoint thuộc mục tiêu vùng",`${target} ppm · vùng ${zone.targetTdsMin}–${zone.targetTdsMax}`,false],["Nhiệt độ hợp lệ","Readiness API chưa tích hợp",false],["Mực nước","Readiness API chưa tích hợp",false],["Bơm A/B đã hiệu chuẩn","Readiness API chưa tích hợp",false],["Bơm hồi lưu",mainPump?"Snapshot: đang chạy":"Snapshot: đang tắt",false],["Capability điều khiển",actuatorAvailable?"Capability thủ công đã xác minh":"Bị khóa",false],["Dosing run hoạt động","Readiness API chưa tích hợp",false]] as const;
-  const passedChecks=checks.filter(([, , ok])=>ok).length;
-  const readiness=Math.round(passedChecks/checks.length*100);
-  const ready=passedChecks===checks.length;
-  return <div className="view-stack"><ViewHeader eyebrow="Rule-based · Chỉ đọc" title="Auto Dosing V2" description="Giao diện mới chưa nối API settings/readiness; Backend Phase 22 tiếp tục khóa Auto Dosing OFF." action={<div className="dosing-master"><span><small>TRẠNG THÁI</small><strong>OFF · BỊ KHÓA</strong></span><button type="button" className="switch" role="switch" aria-label="Auto Dosing bị khóa" aria-checked={false} disabled><span/></button></div>} />
-    {!actuatorAvailable&&<div className="prototype-warning" data-testid="dosing-capability-lock"><LockKeyhole size={21}/><div><strong>Auto Dosing hiện bị khóa kích hoạt</strong><p>Bạn vẫn có thể xem và lưu cấu hình hợp lệ với Auto Dosing ở trạng thái OFF. Việc lưu cấu hình không tạo lệnh điều khiển bơm.</p><small>Lý do: {capabilities.autoDosingLockReason}.</small></div></div>}
-    <section className="dashboard-grid dosing-grid"><article className="panel readiness-panel"><div className="panel-head"><div><span className="panel-kicker">Safety interlock</span><h2>Mức độ sẵn sàng</h2></div><div className="ready-ring" data-testid="dosing-readiness"><b>{readiness}</b><small>%</small></div></div><div className="readiness-list">{checks.map(([label,value,ok])=><div key={label}><span className={ok?"pass":"fail"}>{ok?<Check size={13}/>:<X size={13}/>}</span><strong>{label}</strong><em>{value}</em></div>)}</div><div className={`readiness-result ${ready?"ready":"blocked"}`}><ShieldCheck size={18}/><div><strong>{ready?"Đủ điều kiện để Backend đánh giá":"Đang bị khóa an toàn"}</strong><p>{ready?"Frontend vẫn chờ Backend xác nhận trước mọi thay đổi trạng thái.":"Khắc phục các điều kiện chưa đạt ở danh sách trên."}</p></div></div></article>
-      <article className="panel settings-panel"><div className="panel-head"><div><span className="panel-kicker">Cấu hình chỉ đọc</span><h2>Thông số dosing</h2></div><span className="preset-chip"><Sprout size={12}/> Mẫu giao diện · ngày {cropAgeDays(crop.sowDate)}</span></div><div className="crop-linked-target" data-testid="dosing-zone-target"><Sparkles size={15}/><span>Mục tiêu giao diện của {zone.name}: <b>{zone.targetTdsMin}–{zone.targetTdsMax} ppm</b>. Chưa đồng bộ với settings Backend.</span></div><div className="settings-form"><label>TDS setpoint<div><input aria-invalid={!targetInZone} value={target} onChange={e=>setTarget(Number(e.target.value))} type="number" disabled/><span>ppm</span></div></label><label>Liều mỗi bước / bơm<div><input value={stepDose} onChange={e=>setStepDose(Number(e.target.value))} type="number" disabled/><span>ml</span></div></label><label>Liều tối đa / run<div><input value={maxDose} onChange={e=>setMaxDose(Number(e.target.value))} type="number" disabled/><span>ml</span></div></label><label>Giới hạn ngày / bơm<div><input value={dailyLimit} onChange={e=>setDailyLimit(Number(e.target.value))} type="number" disabled/><span>ml</span></div></label><label>Thời gian chờ trộn<div><input value={mixMinutes} onChange={e=>setMixMinutes(Number(e.target.value))} type="number" disabled/><span>phút</span></div></label><label className="check-setting"><input type="checkbox" checked={requireRecirculation} onChange={e=>setRequireRecirculation(e.target.checked)} disabled/> Yêu cầu bơm hồi lưu đang chạy</label></div><button className="save-settings" disabled>Backend settings chưa tích hợp</button><p className="save-safety-note"><ShieldCheck size={14}/> Trang này không thể bật Auto Dosing hoặc gửi lệnh tới ESP32.</p></article></section>
-    <section className="panel dosing-sequence"><div className="panel-head"><div><span className="panel-kicker">Mô tả thuật toán chỉ đọc</span><h2>Chuỗi vận hành dự kiến</h2></div><span className="status-chip muted">Không phải run runtime</span></div><div className="sequence-flow">{[["01","Đánh giá an toàn","Backend"],["02","Pulse bơm A","Sau interlock"],["03","Pulse bơm B","Sau A hoàn tất"],["04","Chờ trộn","Theo settings"],["05","Đọc lại TDS","Measurement mới"],["06","Kết luận","Backend authority"]].map(([n,t,v])=><div key={n}><span>{n}</span><strong>{t}</strong><small>{v}</small></div>)}</div></section>
-    <section className="dashboard-grid equal"><article className="panel"><div className="panel-head"><div><span className="panel-kicker">Giới hạn ngày</span><h2>Lượng dinh dưỡng đã dùng</h2></div><span className="date-chip"><CalendarDays size={13}/> Chưa nạp</span></div><div className="usage-bars"><div><div><strong>Bơm A</strong><span>— ml</span></div><i><b style={{width:"0%"}}/></i></div><div className="b"><div><strong>Bơm B</strong><span>— ml</span></div><i><b style={{width:"0%"}}/></i></div></div><p className="usage-note"><ShieldCheck size={14}/> Chưa tích hợp endpoint thống kê giới hạn ngày.</p></article><article className="panel"><div className="panel-head"><div><span className="panel-kicker">Run gần nhất</span><h2>Kết quả đáp ứng dinh dưỡng</h2></div><span className="status-chip muted">Chưa nạp</span></div><div className="response-kpis"><span><small>Trước dosing</small><b>—</b></span><span><small>Sau trộn</small><b>—</b></span><span><small>Chênh lệch</small><b>—</b></span></div><button className="full-button" disabled>Chưa tích hợp lịch sử run</button></article></section>
+  const [monitoring, setMonitoring] = useState<AutoDosingMonitoringSnapshot | null>(null);
+  const [monitoringError, setMonitoringError] = useState<string | null>(null);
+  const [monitoringLoading, setMonitoringLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    let requestInFlight = false;
+    const load = async () => {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const result = await backendApiAdapter.getAutoDosingMonitoring(zone.deviceId);
+        if (active) {
+          setMonitoring(result);
+          setMonitoringError(null);
+        }
+      } catch (error) {
+        if (active) setMonitoringError(error instanceof Error ? error.message : "Không tải được dữ liệu Auto Dosing");
+      } finally {
+        requestInFlight = false;
+        if (active) setMonitoringLoading(false);
+      }
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 5000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [zone.deviceId]);
+
+  const settings = monitoring?.settings ?? null;
+  const readinessData = monitoring?.readiness ?? null;
+  const reasons = readinessData?.reasons ?? [];
+  const hasAnyReason = (reasonNames: string[]) => reasonNames.some(reason => reasons.includes(reason));
+  const tdsReasons = ["tds_control_invalid", "tds_unstable", "tds_measurement_stale", "tds_calibration_set_missing", "tds_calibration_set_inactive", "tds_calibration_insufficient_points", "tds_calibration_set_mismatch", "tds_outside_calibration_range", "tds_calibration_warning", "tds_temperature_not_compensated"];
+  const checks: readonly [string, string, boolean][] = [
+    ["TDS hợp lệ & ổn định", hasAnyReason(tdsReasons) ? "Backend chưa xác nhận" : "Backend xác nhận", Boolean(readinessData) && !hasAnyReason(tdsReasons)],
+    ["Dải mục tiêu đã xác nhận", settings?.targetRangeConfirmed ? `${formatDosingNumber(settings.targetMinPpm, 0)}–${formatDosingNumber(settings.targetMaxPpm, 0)} ppm · ${settings.cropCode}` : "Chưa xác nhận", settings?.targetRangeConfirmed === true && !hasAnyReason(["crop_profile_invalid", "tds_target_range_unconfirmed", "tds_target_outside_calibrated_range"])],
+    ["Nhiệt độ hợp lệ", hasAnyReason(["water_temp_invalid"]) ? "Backend từ chối" : "Backend xác nhận", Boolean(readinessData) && !hasAnyReason(["water_temp_invalid"])],
+    ["Mực nước", hasAnyReason(["water_level_low"]) ? "Không bình thường" : "Bình thường", Boolean(readinessData) && !hasAnyReason(["water_level_low"])],
+    ["Bơm A/B đã hiệu chuẩn", hasAnyReason(["pump_calibration_missing"]) ? "Thiếu calibration" : "Đã xác nhận", Boolean(readinessData) && !hasAnyReason(["pump_calibration_missing"])],
+    ["Bơm hồi lưu", mainPump ? "Snapshot: đang chạy" : "Snapshot: đang tắt", Boolean(readinessData) && !hasAnyReason(["main_pump_not_running"])],
+    ["Giới hạn liều ngày", hasAnyReason(["daily_dose_limit_reached"]) ? "Đã chạm giới hạn" : "Còn dung lượng", Boolean(readinessData) && !hasAnyReason(["daily_dose_limit_reached"])],
+    ["Dosing run hoạt động", monitoring?.activeRun ? `${monitoring.activeRun.status} · ${monitoring.activeRun.currentStep}` : "Không có run hoạt động", Boolean(readinessData) && !hasAnyReason(["dosing_run_active", "mixing_wait_active"])],
+  ];
+  const passedChecks = checks.filter(([, , ok]) => ok).length;
+  const readiness = readinessData ? Math.round(passedChecks / checks.length * 100) : 0;
+  const ready = readinessData?.ready === true;
+  const actuatorAvailable = !capabilities.actuatorsLocked && capabilities.pumpCommandsEnabled;
+  const latestRun = monitoring?.runs[0] ?? null;
+  const usage = monitoring?.dailyUsage ?? null;
+  const response = monitoring?.latestNutrientResponse ?? null;
+  const autoDosingOn = settings?.enabled === true;
+
+  return <div className="view-stack" data-testid="auto-dosing-monitor" data-monitor-state={monitoringLoading ? "loading" : monitoringError ? "error" : "ready"}>
+    <ViewHeader eyebrow="Rule-based · Chỉ đọc" title="Auto Dosing V2" description="Theo dõi settings, safety readiness, lịch sử run và giới hạn liều trực tiếp từ Backend. Trang này không có thao tác điều khiển." action={<div className="dosing-master"><span><small>TRẠNG THÁI BACKEND</small><strong>{autoDosingOn ? "ON TRONG SETTINGS" : "OFF"}{!capabilities.autoDosingCanEnable ? " · BỊ KHÓA" : ""}</strong></span><button type="button" className="switch" role="switch" aria-label="Trạng thái Auto Dosing chỉ đọc" aria-checked={autoDosingOn} disabled><span/></button></div>} />
+    <div className={`prototype-warning ${monitoringError ? "locked" : ""}`} data-testid="dosing-runtime-status"><LockKeyhole size={21}/><div><strong>{monitoringLoading ? "Đang tải dữ liệu Auto Dosing" : monitoringError ? "Không làm mới được dữ liệu Auto Dosing" : "Giám sát runtime chỉ đọc"}</strong><p>{monitoringError || "Dữ liệu tự làm mới mỗi 5 giây. Không có API ghi, nút bật dosing hoặc đường gửi pump command trên màn hình này."}</p><small>Capability: {capabilities.autoDosingLockReason}.</small></div></div>
+    {!actuatorAvailable && <div className="prototype-warning" data-testid="dosing-capability-lock"><ShieldCheck size={21}/><div><strong>Actuator đang bị khóa fail-closed</strong><p>Backend và firmware Stage 1 tiếp tục từ chối đường điều khiển bơm. Monitoring không thay đổi trạng thái khóa.</p></div></div>}
+
+    <section className="dashboard-grid dosing-grid">
+      <article className="panel readiness-panel"><div className="panel-head"><div><span className="panel-kicker">Backend safety interlock</span><h2>Mức độ sẵn sàng</h2></div><div className="ready-ring" data-testid="dosing-readiness"><b>{readiness}</b><small>%</small></div></div><div className="readiness-list">{checks.map(([label,value,ok])=><div key={label}><span className={ok?"pass":"fail"}>{ok?<Check size={13}/>:<X size={13}/>}</span><strong>{label}</strong><em>{value}</em></div>)}</div><div className={`readiness-result ${ready?"ready":"blocked"}`}><ShieldCheck size={18}/><div><strong>{ready?"Backend xác nhận đủ điều kiện đánh giá":"Backend đang chặn Auto Dosing"}</strong><p>{reasons.length ? reasons.map(getDosingReasonLabel).join(" · ") : ready ? "Không có interlock nào đang chặn." : "Chưa có dữ liệu readiness."}</p></div></div></article>
+      <article className="panel settings-panel"><div className="panel-head"><div><span className="panel-kicker">Cấu hình Backend · chỉ đọc</span><h2>Thông số dosing</h2></div><span className="preset-chip"><Sprout size={12}/> {settings?.cropCode || "—"} · ngày {cropAgeDays(crop.sowDate)}</span></div><div className="crop-linked-target" data-testid="dosing-zone-target"><Sparkles size={15}/><span>Dải mục tiêu đã lưu: <b>{formatDosingNumber(settings?.targetMinPpm ?? null,0)}–{formatDosingNumber(settings?.targetMaxPpm ?? null,0)} ppm</b> · xác nhận: {settings?.targetRangeConfirmed ? "Có" : "Không"}</span></div><div className="settings-form"><label>Target min<div><input value={settings?.targetMinPpm ?? ""} readOnly disabled/><span>ppm</span></div></label><label>Target max<div><input value={settings?.targetMaxPpm ?? ""} readOnly disabled/><span>ppm</span></div></label><label>Liều mỗi bước / bơm<div><input value={settings?.stepDoseMlPerPump ?? ""} readOnly disabled/><span>ml</span></div></label><label>Liều tối đa / run<div><input value={settings?.maxDoseMlPerPumpPerRun ?? ""} readOnly disabled/><span>ml</span></div></label><label>Giới hạn ngày / bơm<div><input value={settings?.maxDailyDoseMlPerPump ?? ""} readOnly disabled/><span>ml</span></div></label><label>Thời gian chờ trộn<div><input value={settings?.mixingDelayMs == null ? "" : settings.mixingDelayMs / 60000} readOnly disabled/><span>phút</span></div></label><label className="check-setting"><input type="checkbox" checked={settings?.requireMainPumpOn === true} readOnly disabled/> Yêu cầu bơm hồi lưu đang chạy</label></div><p className="save-safety-note"><ShieldCheck size={14}/> Chỉ Backend settings API là nguồn dữ liệu; frontend này không gửi thay đổi.</p><p className="monitor-meta">Đánh giá cuối: <b>{getDosingReasonLabel(settings?.lastEvaluationReason ?? null)}</b> · TDS {formatDosingNumber(settings?.lastEvaluationTdsPpm ?? null,2)} · {formatDosingTime(settings?.lastEvaluationAt ?? null)}</p></article>
+    </section>
+
+    <section className="panel dosing-sequence"><div className="panel-head"><div><span className="panel-kicker">Chuỗi vận hành Backend</span><h2>Trạng thái tuần tự A → B → chờ trộn</h2></div><span className={`status-chip ${monitoring?.activeRun ? "warning" : "muted"}`}>{monitoring?.activeRun ? `${monitoring.activeRun.status} · ${monitoring.activeRun.currentStep}` : "Không có active run"}</span></div><div className="sequence-flow">{[["01","Đánh giá an toàn","Backend"],["02","Pulse bơm A",latestRun?.pumpA.status || "Chưa chạy"],["03","Pulse bơm B",latestRun?.pumpB.status || "Chưa chạy"],["04","Chờ trộn",latestRun?.currentStep === "mixing_wait" ? "Đang chờ" : "Theo settings"],["05","Đọc lại TDS",latestRun?.tdsPpmAfterMixing == null ? "Chưa có" : `${latestRun.tdsPpmAfterMixing.toFixed(2)} ppm`],["06","Kết luận",latestRun?.status || "Chưa có run"]].map(([n,t,v])=><div key={n}><span>{n}</span><strong>{t}</strong><small>{v}</small></div>)}</div></section>
+
+    <section className="dashboard-grid equal"><article className="panel"><div className="panel-head"><div><span className="panel-kicker">Giới hạn ngày</span><h2>Lượng dinh dưỡng đã dùng</h2></div><span className="date-chip"><CalendarDays size={13}/> {usage?.localDate || "—"}</span></div><div className="usage-bars"><div><div><strong>Bơm A</strong><span>{formatDosingNumber(usage?.dailyDoseUsedMlPerPump ?? null,2)} / {formatDosingNumber(usage?.maxDailyDoseMlPerPump ?? null,2)} ml</span></div><i><b style={{width:`${usage?.progressPercentage ?? 0}%`}}/></i></div><div className="b"><div><strong>Bơm B</strong><span>{formatDosingNumber(usage?.dailyDoseUsedMlPerPump ?? null,2)} / {formatDosingNumber(usage?.maxDailyDoseMlPerPump ?? null,2)} ml</span></div><i><b style={{width:`${usage?.progressPercentage ?? 0}%`}}/></i></div></div><p className="usage-note"><ShieldCheck size={14}/> Còn {formatDosingNumber(usage?.remainingDailyDoseMlPerPump ?? null,2)} ml/bơm · {usage?.runsCounted ?? 0} run được tính.</p></article><article className="panel"><div className="panel-head"><div><span className="panel-kicker">Nutrient response gần nhất</span><h2>Kết quả đáp ứng dinh dưỡng</h2></div><span className="status-chip muted">{response ? formatDosingTime(response.createdAt) : "Chưa có"}</span></div><div className="response-kpis"><span><small>Trước dosing</small><b>{formatDosingNumber(response?.beforeDashboardPpm ?? null,2)}</b></span><span><small>Sau trộn</small><b>{formatDosingNumber(response?.afterDashboardPpm ?? null,2)}</b></span><span><small>Chênh lệch</small><b>{formatDosingNumber(response?.deltaDashboardPpm ?? null,2)}</b></span></div><p className="usage-note"><Activity size={14}/> Ước lượng: {formatDosingNumber(response?.estimatedResponsePpmPerMl ?? null,2)} ppm/ml.</p></article></section>
+
+    <section className="dashboard-grid equal dosing-history-grid"><article className="panel"><div className="panel-head"><div><span className="panel-kicker">10 run mới nhất</span><h2>Lịch sử dosing</h2></div><span className="status-chip muted">{monitoring?.runs.length ?? 0} bản ghi</span></div><div className="runtime-list" data-testid="dosing-run-history">{monitoring?.runs.length ? monitoring.runs.map(run=><div key={run.runId}><span className={`runtime-state ${run.status}`}/><div><strong>{run.status} · {run.currentStep}</strong><small>{formatDosingTime(run.createdAt)} · TDS {formatDosingNumber(run.tdsPpmAtStart,2)} → {formatDosingNumber(run.tdsPpmAfterMixing,2)} ppm</small></div><em>A {run.pumpA.durationMs ?? "—"} ms/{run.pumpA.status}<br/>B {run.pumpB.durationMs ?? "—"} ms/{run.pumpB.status}</em></div>) : <p className="empty-runtime">Chưa có dosing run.</p>}</div></article><article className="panel"><div className="panel-head"><div><span className="panel-kicker">Sự kiện an toàn</span><h2>Auto Dosing events</h2></div><span className="status-chip muted">{monitoring?.eventSummary.total ?? 0} / {monitoring?.eventSummary.windowHours ?? 24}h</span></div><div className="runtime-list" data-testid="dosing-event-history">{monitoring?.events.length ? monitoring.events.map(event=><div key={event.eventId}><span className="runtime-state event"/><div><strong>{event.eventType}</strong><small>{formatDosingTime(event.createdAt)} · {getDosingReasonLabel(event.reason)}</small></div><em>{event.tdsPpm == null ? "—" : `${event.tdsPpm.toFixed(2)} ppm`}</em></div>) : <p className="empty-runtime">Chưa có Auto Dosing event.</p>}</div></article></section>
   </div>;
 }
 

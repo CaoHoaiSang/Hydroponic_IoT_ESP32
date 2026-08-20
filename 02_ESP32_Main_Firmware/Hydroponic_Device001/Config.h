@@ -14,6 +14,7 @@ const unsigned long SERIAL_BAUDRATE = 115200;
 #define PIN_TDS_ADC 34
 #define PIN_DS18B20_DATA 4
 #define PIN_WATER_LEVEL 27
+#define PIN_EC_POWER_RELAY 32
 
 // Official MOSFET / pump pins.
 #define PIN_PUMP_MAIN 25
@@ -27,6 +28,11 @@ const unsigned long TDS_SAMPLE_INTERVAL_MS = 40;
 const int TDS_WINDOW_TRIM_COUNT_PER_SIDE = 3;
 const int TDS_WINDOW_MAX_ROBUST_SPREAD_RAW = 50;
 const int TDS_WINDOW_MAX_ABSOLUTE_SPREAD_RAW = 80;
+const bool EC_POWER_RELAY_ACTIVE_HIGH = true;
+const unsigned long EC_PROBE_WARMUP_MS = 30000;
+const unsigned long EC_PROBE_MEASUREMENT_INTERVAL_MS = 900000;
+const unsigned long EC_PROBE_MIN_OFF_MS = 60000;
+const unsigned long EC_PROBE_MAX_ON_MS = 35000;
 const float WATER_TEMP_MIN_C = 0.0;
 const float WATER_TEMP_MAX_C = 50.0;
 const unsigned long DS18B20_READ_INTERVAL_MS = 2000;

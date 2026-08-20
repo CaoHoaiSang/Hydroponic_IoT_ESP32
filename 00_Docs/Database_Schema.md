@@ -16,6 +16,10 @@ same-boot uptime anchor and is accompanied by `measurementFreshnessVerified`,
 freshness. The first row without an anchor is fail-closed for control.
 `latest` contains the complete EC/TDS measurement quality contract documented in
 `Payload_Format.md`, plus water level, temperature, pump state, pH placeholder, and uptime.
+Phase 23D also persists the duty-cycle acquisition snapshot: `ecProbePowerMode`,
+`ecProbePowered`, `ecProbeState`, `ecProbeWarmupMs`, `ecProbePoweredAtUptimeMs`, and
+`ecProbeMeasurementTrigger`. These fields describe the captured measurement, not the relay's
+current electrical state after publication.
 
 ## `tds_calibration_sets`
 
